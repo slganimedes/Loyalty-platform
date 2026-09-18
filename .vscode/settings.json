@@ -1,0 +1,45 @@
+// VS Code settings for autonomous AI agent runs.
+// Works with GitHub Copilot Agent Mode; the allow/deny philosophy also
+// informs how you configure Claude Code / other IDE agents.
+{
+  // Keep long agent runs from pausing every few steps (default is 25).
+  "chat.agent.maxRequests": 300,
+
+  // Selective terminal auto-approval: allow safe build/test commands,
+  // gate anything destructive or secret-exfiltrating.
+  "chat.tools.terminal.autoApprove": {
+    "/^python\\b/": true,
+    "/^pip\\s+(install|freeze|list)\\b/": true,
+    "/^uvicorn\\b/": true,
+    "/^pytest\\b/": true,
+    "/^ruff\\b/": true,
+    "/^black\\b/": true,
+    "/^npm\\s+(install|run|test|ci)\\b/": true,
+    "/^npx\\b/": true,
+    "/^docker\\s+(compose|build|images|ps|logs)\\b/": true,
+    "/^(ls|pwd|cat|echo|grep|find|mkdir|touch)\\b/": true,
+    "/^git\\s+(status|add|commit|diff|log|branch|checkout|init)\\b/": true,
+
+    "rm": false,
+    "rmdir": false,
+    "del": false,
+    "kill": false,
+    "sudo": false,
+    "chmod": false,
+    "chown": false,
+    "curl": false,
+    "wget": false,
+    "eval": false,
+    "/^git\\s+(push|reset|revert|clean)\\b/": false,
+    "/^rm\\s+-rf/": false
+  },
+
+  // Do NOT enable global YOLO auto-approve (dangerous with certs/secrets in repo).
+  "chat.tools.autoApprove": false,
+
+  "chat.agent.enabled": true,
+
+  // Python niceties
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["api/tests"]
+}

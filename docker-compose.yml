@@ -1,0 +1,52 @@
+services:
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/loyalty.db
+      ASSETS_DIR: /data/assets
+    volumes:
+      - ./data:/data
+      - ./data/certs:/certs:ro
+    expose: ["8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks: [loyalty]
+  admin-web:
+    build: ./admin-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose: ["80"]
+    ports:
+      - "127.0.0.1:8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [loyalty]
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      api:
+        condition: service_healthy
+      admin-web:
+        condition: service_healthy
+    networks: [loyalty]
+networks:
+  loyalty:
+    driver: bridge

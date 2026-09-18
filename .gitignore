@@ -1,0 +1,40 @@
+# --- Secrets & environment ---
+.env
+CLAUDE.local.md
+*.p12
+*.pem
+*.key
+google-sa.json
+
+# --- Data & certs (never commit the DB or wallet certs) ---
+data/
+!data/.gitkeep
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+build/
+
+# --- Editor / OS ---
+.vscode/*
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+*.db
+*.db-*
+.env.*
+!.env.example
+playwright-report/
+test-results/
