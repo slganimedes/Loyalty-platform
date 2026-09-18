@@ -362,9 +362,8 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
     ) as client:
         response = client.post(f"{GOOGLE_BASE}/loyaltyClass", json=class_body)
         if response.status_code == 409:
-            patch = {
-                key: value for key, value in class_body.items() if key not in ("id", "reviewStatus")
-            }
+            # Google requires UNDER_REVIEW even when patching an approved class.
+            patch = {key: value for key, value in class_body.items() if key != "id"}
             client.patch(f"{GOOGLE_BASE}/loyaltyClass/{class_id}", json=patch).raise_for_status()
         else:
             response.raise_for_status()

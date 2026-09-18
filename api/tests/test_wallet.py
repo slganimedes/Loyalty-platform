@@ -259,6 +259,9 @@ def test_google_create_patch_and_signed_save_link(wallet_config, monkeypatch):
 
     def handler(request):
         calls.append(request)
+        if request.method == "PATCH" and "loyaltyClass/" in request.url.path:
+            if json.loads(request.content).get("reviewStatus") != "UNDER_REVIEW":
+                return httpx.Response(400, json={"error": {"message": "Invalid review status"}})
         if request.method == "POST":
             resource = json.loads(request.content)["id"]
             if resource in created:
