@@ -10,6 +10,7 @@ def render(root: Path) -> str:
     settings = {
         "SOURCE_REF": ("source_ref", "REPLACE_WITH_PUBLISHED_COMMIT"),
         "SOURCE_URL": ("source_url", ""),
+        "GITHUB_TOKEN": ("github_token", ""),
         "PAN_HASH_SECRET": ("pan_secret", "REPLACE_WITH_STABLE_RANDOM_SECRET"),
         "BOOTSTRAP_ADMIN_USERNAME": ("admin_user", "admin"),
         "BOOTSTRAP_ADMIN_PASSWORD": ("admin_password", "REPLACE_WITH_RANDOM_PASSWORD"),

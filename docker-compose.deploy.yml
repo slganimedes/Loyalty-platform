@@ -6,7 +6,8 @@ services:
     restart: "no"
     environment:
       SOURCE_REF: ${SOURCE_REF:?Set SOURCE_REF to the full published Git commit}
-      SOURCE_URL: ${SOURCE_URL:-https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/${SOURCE_REF}}
+      SOURCE_URL: ${SOURCE_URL:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     volumes:
       - source:/source
     entrypoint: ["python", "-c"]
@@ -22,7 +23,17 @@ services:
             with tempfile.TemporaryDirectory(dir=root) as scratch:
                 scratch = pathlib.Path(scratch)
                 archive = scratch / 'source.tar.gz'
-                with urllib.request.urlopen(os.environ.get('SOURCE_URL') or ('https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/' + ref), timeout=60) as response, archive.open('wb') as output:
+                token = os.environ.get('GITHUB_TOKEN', '')
+                url = os.environ.get('SOURCE_URL')
+                headers = {}
+                if not url:
+                    if token:
+                        url = 'https://api.github.com/repos/slganimedes/Loyalty-platform/tarball/' + ref
+                        headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}
+                    else:
+                        url = 'https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/' + ref
+                request = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(request, timeout=60) as response, archive.open('wb') as output:
                     shutil.copyfileobj(response, output)
                 unpack = scratch / 'unpack'
                 unpack.mkdir()

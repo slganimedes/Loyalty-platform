@@ -53,7 +53,7 @@ El repositorio predeterminado es `slganimedes/Loyalty-platform`. `SOURCE_REF` es
 obligatorio y debe ser un SHA de 40 caracteres, para fijar exactamente la versión.
 `SOURCE_URL` permite usar un espejo del archivo fuente; normalmente se deja sin
 definir y se descarga de `https://codeload.github.com/.../tar.gz/<SHA>`.
-Los ejemplos no incluyen autenticación para repositorios privados.
+Para repositorios privados, configurar GITHUB_TOKEN y dejar SOURCE_URL vacio.
 
 ## Arranque
 
@@ -196,3 +196,14 @@ no repartir trafico entre dos bases de datos independientes.
 source y web-build deben acabar con codigo 0; api y admin-web deben estar healthy,
 y cloudflared conectado. Para regenerar el fichero Unraid tras publicar otra
 version: python scripts/render_install_compose.py --unraid-ref SHA_COMPLETO.
+
+
+### Repositorio privado
+
+El repositorio Loyalty-platform es privado. Rellenar tambien GITHUB_TOKEN en
+x-installation con un token fine-grained de GitHub limitado a este repositorio,
+permiso Contents: Read-only. El servicio source descarga mediante la API de GitHub;
+el token solo se entrega a ese servicio y no se incorpora al codigo descargado.
+Mantener SOURCE_URL vacio. Para repositorios publicos se puede dejar el token vacio.
+La plantilla sin rellenar puede consultarse iniciando sesion en GitHub; los enlaces
+Raw anonimos de repositorios privados devuelven 404.
