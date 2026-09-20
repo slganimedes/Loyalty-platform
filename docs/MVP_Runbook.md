@@ -45,3 +45,17 @@ retained as legacy. See [CAMPAIGN_PASSES.md](CAMPAIGN_PASSES.md).
 
 Use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md) for standard containers that
 download source from GitHub. Publication requires an explicit user request.
+
+
+## Merchant deletion, design and installation update
+
+Merchant deletion is available to super admins with a server-generated impact
+summary, stale-confirmation protection, cascading logical deletion and durable
+Google/Apple revocation retries. History is retained. The admin uses red Getnet-inspired
+accents, rounded surfaces, accessible focus and responsive navigation.
+Public API documentation is available at `/docs` and linked from the API root
+and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
+(paths relative to the repository root). For installation without `.env`, copy
+`docker-compose.install.yml` to a private file and fill in `x-installation`.
+Regenerate that template with `python scripts/render_install_compose.py` after
+changes to the canonical Compose. Do not publish the private settings.

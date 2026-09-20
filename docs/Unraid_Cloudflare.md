@@ -38,3 +38,17 @@ Apple/Google only talk to the public HTTPS URL — never the local IP.
 
 Start the tunnel with `docker compose --profile tunnel up -d --build`.
 Apply ingestion restrictions to both public hostnames because the admin host proxies `/api/`.
+
+
+## Merchant deletion, design and installation update
+
+Merchant deletion is available to super admins with a server-generated impact
+summary, stale-confirmation protection, cascading logical deletion and durable
+Google/Apple revocation retries. History is retained. The admin uses red Getnet-inspired
+accents, rounded surfaces, accessible focus and responsive navigation.
+Public API documentation is available at `/docs` and linked from the API root
+and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
+(paths relative to the repository root). For installation without `.env`, copy
+`docker-compose.install.yml` to a private file and fill in `x-installation`.
+Regenerate that template with `python scripts/render_install_compose.py` after
+changes to the canonical Compose. Do not publish the private settings.

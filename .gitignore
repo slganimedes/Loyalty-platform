@@ -1,5 +1,6 @@
 # --- Secrets & environment ---
 .env
+docker-compose.private.yml
 CLAUDE.local.md
 *.p12
 *.pem

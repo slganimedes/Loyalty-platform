@@ -240,3 +240,96 @@ def test_legacy_pass_migration_preserves_tokens_and_registrations(tmp_path, monk
         assert con.execute(text("SELECT pass_id FROM device_registration")).scalar() == "p"
         assert con.execute(text("PRAGMA foreign_key_check")).all() == []
     engine.dispose()
+
+
+def test_merchant_deletion_summary_cascade_and_retries(google_provider):
+    mid, cid = shop()
+    other_mid, other_cid = shop()
+    camp = campaign(mid)
+    a = assign(cid, camp).json()["pass"]
+    payment(mid)
+    coupon = client.post(
+        f"/api/v1/merchants/{mid}/coupons", json={"customer_id": cid, "amount": 5}
+    ).json()
+    with SessionLocal() as db:
+        user = models.AdminUser(
+            username="deleted-shop-admin",
+            password_hash=hash_password("secret"),
+            role="sme_admin",
+            merchant_id=mid,
+        )
+        db.add(user)
+        db.commit()
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "deleted-shop-admin", "password": "secret"}
+    )
+    headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+    assert (
+        client.get(f"/api/v1/merchants/{mid}/deletion-preview", headers=headers).status_code == 403
+    )
+    preview = client.get(f"/api/v1/merchants/{mid}/deletion-preview").json()
+    assert (
+        preview["customers"]
+        == preview["passes"]
+        == preview["campaigns"]
+        == preview["coupons"]
+        == preview["admins"]
+        == 1
+    )
+    assert preview["transactions"] == 1
+    assert client.delete(f"/api/v1/merchants/{mid}").status_code == 422
+    google_provider[2][0] = 503
+    result = client.request(
+        "DELETE", f"/api/v1/merchants/{mid}", json={"revision": preview["revision"]}
+    )
+    assert result.status_code == 200 and result.json()["pending_revocations"] == 1
+    assert mid not in [m["id"] for m in client.get("/api/v1/merchants").json()]
+    assert client.get(f"/api/v1/merchants/{mid}/customers").status_code == 404
+    assert client.patch(f"/api/v1/merchants/{mid}", json={"status": "active"}).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/merchants/{mid}/customers", json={"customer_code": "late"}
+        ).status_code
+        == 404
+    )
+    assert client.get("/api/v1/users/me", headers=headers).status_code == 401
+    assert (
+        client.post(
+            "/api/v1/auth/login", json={"username": "deleted-shop-admin", "password": "secret"}
+        ).status_code
+        == 401
+    )
+    assert payment(mid).status_code == 409
+    assert client.get(f"/api/v1/merchants/{other_mid}/customers").json()[0]["id"] == other_cid
+    with SessionLocal() as db:
+        assert db.get(models.Customer, cid).deleted
+        assert db.get(models.Campaign, camp).deleted
+        assert db.get(models.Coupon, coupon["id"]).status == "cancelled"
+        assert db.get(models.Pass, a["id"]).status == "revoked"
+        assert db.query(models.Movement).filter_by(customer_id=cid).count() > 0
+    google_provider[2][0] = 200
+    passes.retry_pending_revocations()
+    with SessionLocal() as db:
+        row = db.get(models.Pass, a["id"])
+        assert row.updated_tag == row.synced_tag
+
+
+def test_merchant_deletion_rejects_stale_confirmation():
+    mid, cid = shop()
+    preview = client.get(f"/api/v1/merchants/{mid}/deletion-preview").json()
+    client.post(f"/api/v1/merchants/{mid}/customers", json={"customer_code": "added-after-preview"})
+    response = client.request(
+        "DELETE", f"/api/v1/merchants/{mid}", json={"revision": preview["revision"]}
+    )
+    assert response.status_code == 409
+    assert client.get(f"/api/v1/merchants/{mid}").json()["status"] == "active"
+
+
+def test_public_api_entry_and_documentation():
+    public = TestClient(app)
+    assert 'href="/docs"' in public.get("/").text
+    assert public.get("/docs").status_code == 200
+    assert public.get("/redoc").status_code == 200
+    schema = public.get("/openapi.json").json()
+    assert "delete" in schema["paths"]["/api/v1/merchants/{merchant_id}"]
+    assert public.get("/api/v1/merchants").status_code == 401

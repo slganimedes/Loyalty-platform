@@ -35,7 +35,9 @@ def current_user(
             401, "Invalid or expired session", headers={"WWW-Authenticate": "Bearer"}
         )
     user = db.get(models.AdminUser, session.user_id)
-    if not user:
+    if not user or (
+        user.merchant_id and db.get(models.Merchant, user.merchant_id).status == "deleted"
+    ):
         raise HTTPException(401, "Invalid session")
     return user
 
@@ -50,7 +52,7 @@ def authorize_merchant(merchant_id: str, user: models.AdminUser, db: Session) ->
     if user.role != "super_admin" and user.merchant_id != merchant_id:
         raise HTTPException(403, "Merchant access denied")
     merchant = db.get(models.Merchant, merchant_id)
-    if not merchant:
+    if not merchant or merchant.status == "deleted":
         raise HTTPException(404, "Merchant not found")
     return merchant
 
@@ -83,6 +85,8 @@ class UserUpdate(BaseModel):
 def login(body: LoginIn, db: Session = Depends(get_db)) -> dict:
     user = db.query(models.AdminUser).filter_by(username=body.username).first()
     if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(401, "Invalid username or password")
+    if user.merchant_id and db.get(models.Merchant, user.merchant_id).status == "deleted":
         raise HTTPException(401, "Invalid username or password")
     token = secrets.token_urlsafe(32)
     db.add(

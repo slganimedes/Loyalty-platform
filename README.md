@@ -93,3 +93,22 @@ See **`docs/Unraid_Cloudflare.md`** (Unraid + Cloudflare Tunnel, `slmartinez.org
 ## Build it out with your AI agent
 Open the repo in VS Code, then paste `docs/KICKOFF_PROMPT.md` into your agent (Claude Code,
 etc.). It reads `CLAUDE.md` + `docs/PRD.md` automatically and continues the build.
+
+
+## Merchant deletion, design and installation update
+
+Merchant deletion is available to super admins with a server-generated impact
+summary, stale-confirmation protection, cascading logical deletion and durable
+Google/Apple revocation retries. History is retained. The admin uses red Getnet-inspired
+accents, rounded surfaces, accessible focus and responsive navigation.
+Public API documentation is available at `/docs` and linked from the API root
+and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
+(paths relative to the repository root). For installation without `.env`, copy
+`docker-compose.install.yml` to a private file and fill in `x-installation`.
+Regenerate that template with `python scripts/render_install_compose.py` after
+changes to the canonical Compose. Do not publish the private settings.
+
+For the four-button Unraid Compose Manager editor, paste `docker-compose.unraid.yml`
+into **Compose File**, fill its installation settings and leave **Env File** empty.
+The tunnel starts automatically and no host ports are published. See
+[the Unraid editor instructions](docs/COMPOSE_DEPLOYMENT.md#unraid-los-cuatro-botones-del-editor).

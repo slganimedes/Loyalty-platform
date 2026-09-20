@@ -111,3 +111,88 @@ hará `git push` sin instrucción explícita del usuario. Mientras tanto, probar
 versión local con `docker-compose.yml`; para el despliegue remoto, elegir después
 el SHA del commit que incluya este desarrollo. Un commit anterior sin
 `scripts/start_api.sh` será rechazado por el inicializador.
+
+
+## Instalacion sin .env
+
+La opcion recomendada para pegar el stack en Unraid es `docker-compose.install.yml`.
+Es un Compose completo de contenedores estandar, sin `build`, sin `env_file` y sin
+variables `${...}`. Los ajustes se concentran en `x-installation` y se reutilizan
+mediante anclas YAML. `docker-compose.deploy.yml` sigue disponible para instalaciones
+que prefieran gestionar variables externamente.
+
+1. Copiar la plantilla a `docker-compose.private.yml` FUERA del repositorio de despliegue.
+2. Editar `x-installation`: `SOURCE_REF` (SHA completo de un commit publicado con estos
+   cambios), `PAN_HASH_SECRET`, usuario y password inicial, dominios y token del tunel.
+   Generar secretos aleatorios; mantener PAN_HASH_SECRET si se reutiliza una base.
+3. Ajustar DATA_MOUNT y CERTS_MOUNT a rutas absolutas de Unraid, por ejemplo
+   `/mnt/user/appdata/loyalty-platform/data:/data` y
+   `/mnt/user/appdata/loyalty-platform/data/certs:/certs:ro`.
+4. Copiar los archivos Google/Apple necesarios al directorio de certificados. El
+   Compose contiene rutas; no incorpora claves privadas ni certificados en el YAML.
+5. Arrancar:
+
+```bash
+docker compose -f docker-compose.private.yml config --quiet
+docker compose -f docker-compose.private.yml --profile tunnel up -d --wait --wait-timeout 600
+```
+
+Sin tunel, omitir `--profile tunnel`. La primera creacion de un administrador usa
+el password indicado; modificarlo despues no cambia la cuenta ya creada. Los
+proveedores se configuran y activan en el panel Wallet. Para un `$` literal en un
+valor, escribir `$$` segun el escape de Docker Compose. No publicar el fichero
+privado: contiene secretos; esta excluido en `.gitignore`. No ejecutar `config`
+sin `--quiet` al compartir salidas, porque muestra la configuracion resuelta.
+
+El codigo se descarga del commit fijado. Estos nuevos cambios necesitan publicarse
+antes de usarlos desde GitHub; no seleccionar un commit anterior esperando el nuevo
+comportamiento. La plantilla se regenera desde la configuracion canonica con
+`python scripts/render_install_compose.py`. La prueba
+`python scripts/check_deployment.py --inline` valida esta variante desde cero,
+con archivo fuente local y recursos temporales, sin publicar codigo ni usar datos reales.
+
+## Documentacion publica y Cloudflare
+
+La API sirve una portada en `/`, Swagger UI en `/docs`, ReDoc en `/redoc` y el esquema
+en `/openapi.json`, sin autenticacion para leer la documentacion. Las operaciones
+administrativas siguen requiriendo autenticacion. Nginx tambien publica estos tres
+recursos desde el dominio de administracion y el menu incluye un enlace.
+
+Si el tunel de `api.slmartinez.org` solo publica logos, anadir una ruta para ese
+hostname con Path `^/(docs(/.*)?|redoc|openapi[.]json)?$`, servicio HTTP `api:8000`.
+Conservar la ruta de logos y el resto de rutas Wallet necesarias. El dominio admin
+usa Path vacio y HTTP `admin-web:80`. Comprobar `/docs` y `/openapi.json` desde fuera.
+Las restricciones de ingesta se mantienen en ambos dominios; publicar documentacion
+no implica abrir indiscriminadamente todas las operaciones.
+
+
+## Unraid: los cuatro botones del editor
+
+Para Compose Manager usar `docker-compose.unraid.yml`: pegar TODO su contenido en
+**Compose File**. Incluye un commit fuente fijado, rutas absolutas de appdata,
+contenedores estandar y el tunel sin perfiles. No publica puertos del host y evita
+conflictos con otras aplicaciones de Unraid. El acceso se hace por Cloudflare.
+
+- **Compose File**: rellenar PAN_HASH_SECRET, BOOTSTRAP_ADMIN_PASSWORD,
+  CLOUDFLARE_TUNNEL_TOKEN y GOOGLE_ISSUER_ID en x-installation. Conservar las anclas
+  `&...` y referencias `*...`. SOURCE_REF ya apunta al codigo de esta version.
+- **Env File**: dejar vacio. No hace falta .env.
+- **UI Labels**: opcional. Para admin-web, Web UI = https://admin.slmartinez.org.
+  Los iconos y demas etiquetas pueden quedar con sus valores predeterminados.
+- **Stack Settings**: conservar las rutas del stack predeterminadas, sin fichero
+  Compose o ENV externo. Activar Autostart si se desea inicio al arrancar el array.
+  No necesita perfil ni comandos adicionales. Guardar y pulsar Compose Up.
+
+Crear /mnt/user/appdata/loyalty-platform/data/certs y copiar google-sa.json.
+Si se desean conservar los datos locales, copiar una copia consistente de SQLite
+como data/loyalty.db y conservar PAN_HASH_SECRET y certificados. Con un directorio
+vacio se crea una instalacion nueva; Wallet se activa desde su pantalla.
+
+Configurar el tunel: admin.slmartinez.org -> HTTP admin-web:80; las rutas publicas
+necesarias de api.slmartinez.org -> HTTP api:8000. Al trasladar el mismo tunel desde
+el PC, detener el conector anterior cuando Unraid este preparado para servir, para
+no repartir trafico entre dos bases de datos independientes.
+
+source y web-build deben acabar con codigo 0; api y admin-web deben estar healthy,
+y cloudflared conectado. Para regenerar el fichero Unraid tras publicar otra
+version: python scripts/render_install_compose.py --unraid-ref SHA_COMPLETO.

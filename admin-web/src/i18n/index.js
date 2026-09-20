@@ -1,6 +1,17 @@
 // ES/EN dictionary. Language is persisted in the user record and cached locally.
 export const translations = {
   es: {
+    deleteMerchant: "Eliminar comercio",
+    merchantDeleteIntro: "Se dará de baja este comercio y todos los elementos asociados que se detallan a continuación. Los pases se anularán y los cupones pendientes se cancelarán.",
+    admins: "Administradores sin acceso",
+    historyRetained: "Historial conservado",
+    merchantDeleteDetails: "Se conserva el historial y los registros necesarios para notificar a Google y Apple. Las notificaciones fallidas se reintentan. Esta baja no borra la tarjeta del teléfono.",
+    confirmMerchantDelete: "Confirmar eliminación",
+    cancel: "Cancelar",
+    merchantDeleted: "Comercio eliminado y pases anulados.",
+    merchantDeletePending: "Comercio eliminado. Hay anulaciones pendientes que se reintentarán automáticamente.",
+    apiDocs: "Documentación API",
+
     campaign: "Campaña", provider: "Proveedor", assignPass: "Asignar pase", selectCampaign: "Selecciona una campaña",
     campaignPassHint: "El pase pertenece a una campaña y se asigna al cliente seleccionado.",
     legacyPass: "Pase antiguo sin campaña", walletEnrollment: "Alta en Wallet", passUrl: "URL de alta",
@@ -108,6 +119,17 @@ export const translations = {
     id: "ID",
   },
   en: {
+    deleteMerchant: "Delete merchant",
+    merchantDeleteIntro: "This merchant and all associated items listed below will be deactivated. Passes will be revoked and outstanding coupons cancelled.",
+    admins: "Administrators losing access",
+    historyRetained: "History retained",
+    merchantDeleteDetails: "History and records needed to notify Google and Apple are retained. Failed notifications are retried. This does not remove cards from phones.",
+    confirmMerchantDelete: "Confirm deletion",
+    cancel: "Cancel",
+    merchantDeleted: "Merchant deleted and passes revoked.",
+    merchantDeletePending: "Merchant deleted. Pending revocations will retry automatically.",
+    apiDocs: "API documentation",
+
     campaign: "Campaign", provider: "Provider", assignPass: "Assign pass", selectCampaign: "Select a campaign",
     campaignPassHint: "The pass belongs to a campaign and is assigned to the selected customer.",
     legacyPass: "Legacy pass without campaign", walletEnrollment: "Add to Wallet", passUrl: "Enrollment URL",

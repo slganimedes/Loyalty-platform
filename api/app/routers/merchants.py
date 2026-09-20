@@ -1,4 +1,8 @@
+import hashlib
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +27,15 @@ from .auth import current_user, merchant_access, super_admin
 router = APIRouter(prefix="/api/v1", tags=["merchants"])
 
 
+def lock_live_merchant(db: Session, merchant_id: str) -> models.Merchant:
+    db.commit()
+    db.execute(text("BEGIN IMMEDIATE"))
+    merchant = db.get(models.Merchant, merchant_id, populate_existing=True)
+    if not merchant or merchant.status == "deleted":
+        raise HTTPException(404, "Merchant not found")
+    return merchant
+
+
 # ---------- Merchants ----------
 @router.post("/merchants", response_model=MerchantOut)
 def create_merchant(
@@ -44,7 +57,7 @@ def create_merchant(
 def list_merchants(
     db: Session = Depends(get_db), user: models.AdminUser = Depends(current_user)
 ) -> list[models.Merchant]:
-    query = db.query(models.Merchant)
+    query = db.query(models.Merchant).filter(models.Merchant.status != "deleted")
     if user.role != "super_admin":
         query = query.filter_by(id=user.merchant_id)
     return query.all()
@@ -69,7 +82,7 @@ def update_merchant(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> models.Merchant:
-    m = db.get(models.Merchant, merchant_id)
+    m = lock_live_merchant(db, merchant_id)
     if not m:
         raise HTTPException(404, "Merchant not found")
     for k, v in body.model_dump(exclude_unset=True, exclude={"logo_base64"}).items():
@@ -87,6 +100,87 @@ def update_merchant(
 
 
 # ---------- Customers ----------
+def deletion_summary(db: Session, merchant: models.Merchant) -> dict:
+    customers = db.query(models.Customer).filter_by(merchant_id=merchant.id).all()
+    customer_ids = [c.id for c in customers]
+    groups = {
+        "customers": customers,
+        "campaigns": db.query(models.Campaign).filter_by(merchant_id=merchant.id).all(),
+        "passes": db.query(models.Pass).filter(models.Pass.customer_id.in_(customer_ids)).all(),
+        "coupons": db.query(models.Coupon).filter_by(merchant_id=merchant.id).all(),
+        "admins": db.query(models.AdminUser).filter_by(merchant_id=merchant.id).all(),
+        "transactions": db.query(models.Transaction).filter_by(merchant_id=merchant.id).all(),
+        "movements": db.query(models.Movement)
+        .filter(models.Movement.customer_id.in_(customer_ids))
+        .all(),
+    }
+    snapshot = {key: sorted(row.id for row in rows) for key, rows in groups.items()}
+    revision = hashlib.sha256(
+        json.dumps([merchant.name, snapshot], sort_keys=True).encode()
+    ).hexdigest()
+    return {
+        "name": merchant.name,
+        "revision": revision,
+        **{key: len(rows) for key, rows in groups.items()},
+    }
+
+
+class MerchantDeletion(BaseModel):
+    revision: str
+
+
+@router.get("/merchants/{merchant_id}/deletion-preview")
+def preview_merchant_deletion(
+    merchant_id: str, db: Session = Depends(get_db), user: models.AdminUser = Depends(super_admin)
+) -> dict:
+    merchant = db.get(models.Merchant, merchant_id)
+    if not merchant or merchant.status == "deleted":
+        raise HTTPException(404, "Merchant not found")
+    return deletion_summary(db, merchant)
+
+
+@router.delete("/merchants/{merchant_id}")
+def delete_merchant(
+    merchant_id: str,
+    body: MerchantDeletion,
+    db: Session = Depends(get_db),
+    user: models.AdminUser = Depends(super_admin),
+) -> dict:
+    db.commit()
+    db.execute(text("BEGIN IMMEDIATE"))
+    merchant = db.get(models.Merchant, merchant_id)
+    if not merchant:
+        raise HTTPException(404, "Merchant not found")
+    summary = deletion_summary(db, merchant)
+    if body.revision != summary["revision"]:
+        raise HTTPException(
+            409, "Merchant data changed. Refresh the deletion summary and confirm again."
+        )
+    merchant.status = "deleted"
+    for customer in merchant.customers:
+        customer.deleted = True
+    for campaign in merchant.campaigns:
+        campaign.deleted = True
+        campaign.active = False
+    db.query(models.Coupon).filter_by(merchant_id=merchant_id, status="issued").update(
+        {"status": "cancelled"}
+    )
+    admins = db.query(models.AdminUser.id).filter_by(merchant_id=merchant_id)
+    db.query(models.AdminSession).filter(models.AdminSession.user_id.in_(admins)).delete(
+        synchronize_session=False
+    )
+    rows = (
+        db.query(models.Pass)
+        .join(models.Customer)
+        .filter(models.Customer.merchant_id == merchant_id)
+        .all()
+    )
+    passes.mark_revoked(db, rows)
+    db.commit()
+    pending = sum(not passes.revoke_pass(db, row.customer, row.id) for row in rows)
+    return {"status": "deleted", "pending_revocations": pending, "summary": summary}
+
+
 @router.post("/merchants/{merchant_id}/customers", response_model=dict)
 def enroll_customer(
     merchant_id: str,
@@ -94,8 +188,7 @@ def enroll_customer(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> dict:
-    if not db.get(models.Merchant, merchant_id):
-        raise HTTPException(404, "Merchant not found")
+    lock_live_merchant(db, merchant_id)
     # Only validated HMAC-SHA256 digests are accepted, never raw PAN.
     card_hash = body.card_hash
     c = models.Customer(
@@ -132,8 +225,7 @@ def create_campaign(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> models.Campaign:
-    if not db.get(models.Merchant, merchant_id):
-        raise HTTPException(404, "Merchant not found")
+    lock_live_merchant(db, merchant_id)
     if body.type not in ("points_per_spend", "interaction", "coupon"):
         raise HTTPException(400, "Invalid campaign type")
     camp = models.Campaign(merchant_id=merchant_id, **body.model_dump())
@@ -181,8 +273,7 @@ def issue_coupon(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> models.Coupon:
-    if not db.get(models.Merchant, merchant_id):
-        raise HTTPException(404, "Merchant not found")
+    lock_live_merchant(db, merchant_id)
     customer = db.get(models.Customer, body.customer_id)
     if not customer or customer.deleted or customer.merchant_id != merchant_id:
         raise HTTPException(404, "Customer not found in merchant")

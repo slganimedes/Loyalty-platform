@@ -177,3 +177,37 @@ test("campaign pass assignment shows URL and QR and supports parent deletions", 
   await expect(page.getByRole("button", {name: "Retry revocation"})).toHaveCount(2);
   await request.put("/api/v1/settings/wallet/google", {headers, data: {enabled: false}});
 });
+
+
+test("merchant deletion previews impact, cancels safely and confirms cascade", async ({ page, request }) => {
+  const response = await request.post("/api/v1/auth/login", {data: {username: "browser-admin", password: "browser-test-password"}});
+  const {access_token: token} = await response.json();
+  const headers = {Authorization: `Bearer ${token}`};
+  await request.patch("/api/v1/users/me", {headers, data: {language: "en"}});
+  const merchant = await (await request.post("/api/v1/merchants", {headers, data: {name: "Delete cascade shop"}})).json();
+  await request.post(`/api/v1/merchants/${merchant.id}/customers`, {headers, data: {customer_code: "DELETE-C1"}});
+  await request.post(`/api/v1/merchants/${merchant.id}/campaigns`, {headers, data: {name: "Deletion campaign", type: "interaction", config: {interactions_required: 5, reward_description: "Free coffee"}}});
+  await page.addInitScript(token => sessionStorage.setItem("token", token), token);
+  await page.goto("/merchants");
+  const row = page.getByRole("row").filter({hasText: "Delete cascade shop"});
+  await row.getByRole("button", {name: "Delete", exact: true}).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Delete cascade shop");
+  await expect(dialog).toContainText("History retained");
+  await expect(dialog.locator(".deletion-summary > div").filter({hasText: "Customers"})).toContainText("1");
+  await expect(dialog.locator(".deletion-summary > div").filter({hasText: "Campaigns"})).toContainText("1");
+  await page.screenshot({path: "test-results/merchant-deletion-desktop.png", fullPage: true});
+  await dialog.getByRole("button", {name: "Cancel", exact: true}).click();
+  await expect(row).toBeVisible();
+  await page.setViewportSize({width: 390, height: 844});
+  await row.getByRole("button", {name: "Delete", exact: true}).click();
+  await expect(dialog).toBeVisible();
+  await page.screenshot({path: "test-results/merchant-deletion-mobile.png", fullPage: true});
+  await dialog.getByRole("button", {name: "Confirm deletion", exact: true}).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Merchant deleted");
+  expect((await request.get(`/api/v1/merchants/${merchant.id}/customers`, {headers})).status()).toBe(404);
+  const docs = await request.get("/docs");
+  expect(docs.status()).toBe(200);
+  expect(await docs.text()).toContain("swagger-ui");
+});

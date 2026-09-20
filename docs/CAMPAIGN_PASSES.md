@@ -103,3 +103,29 @@ registros locales. No quedaban registros de dispositivos asociados. Se guardo
 una copia consistente de SQLite antes de la operacion. No quedan pases sin
 campana en esta instancia. La migracion generica sigue conservando los pases
 antiguos de otras instalaciones hasta que se decida su anulacion.
+
+
+## Baja completa de un comercio
+
+Solo un superadministrador puede eliminar un comercio. El boton Eliminar abre un
+resumen obtenido del servidor con el nombre y los totales de clientes, campanas,
+pases, cupones y administradores vinculados, incluidos los registros ya dados de
+baja. Tambien muestra cuantos pagos y movimientos se conservan como historial.
+Cancelar no cambia nada. La confirmacion incluye una revision del resumen: si cambia
+el conjunto de registros o el nombre antes de confirmar, la API devuelve 409 y se
+debe volver a abrir el resumen.
+
+La baja es logica, como en clientes y campanas: el comercio desaparece de los
+listados y no puede reactivarse por PATCH. Todos sus clientes y campanas se dan de
+baja, todos sus pases se anulan y los cupones pendientes se cancelan. Se cierran las
+sesiones de sus administradores y se bloquean nuevos accesos. Los pagos nuevos se
+rechazan. Se conservan historial y registros de Wallet necesarios para entregar la
+anulacion y reintentar errores, incluso aunque el comercio ya no sea visible.
+No se borran los registros de dispositivos Apple antes de que puedan descargar el
+pase anulado. No se trata de una purga de datos personales.
+
+- GET `/api/v1/merchants/{id}/deletion-preview`: resumen y revision.
+- DELETE `/api/v1/merchants/{id}` con `{ "revision": "valor_del_resumen" }`:
+  baja en cascada y numero de notificaciones pendientes.
+
+No se han eliminado comercios reales como parte de la validacion del desarrollo.

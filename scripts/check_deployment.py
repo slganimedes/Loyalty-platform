@@ -9,6 +9,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -83,13 +84,44 @@ def main() -> None:
             "PUBLIC_API_URL": "https://api.example.com",
             "PUBLIC_ADMIN_URL": "https://admin.example.com",
         }
+        compose_file = root / "docker-compose.deploy.yml"
+        if "--inline" in sys.argv:
+            from render_install_compose import render
+
+            content = render(root)
+            assert content == (root / "docker-compose.install.yml").read_text(
+                encoding="utf-8"
+            )
+            replacements = {
+                "source_ref": ref,
+                "source_url": environment["SOURCE_URL"],
+                "admin_user": environment["BOOTSTRAP_ADMIN_USERNAME"],
+                "admin_password": environment["BOOTSTRAP_ADMIN_PASSWORD"],
+                "pan_secret": environment["PAN_HASH_SECRET"],
+                "data_mount": environment["DATA_DIR"] + ":/data",
+                "certs_mount": environment["CERTS_DIR"] + ":/certs:ro",
+                "api_port": f"127.0.0.1:{api_port}:8000",
+                "admin_port": f"127.0.0.1:{admin_port}:80",
+            }
+            import re
+
+            for anchor, value in replacements.items():
+                content = re.sub(
+                    r"&" + anchor + r' "[^"\n]*"',
+                    lambda match, anchor=anchor, value=value: (
+                        "&" + anchor + " " + json.dumps(value)
+                    ),
+                    content,
+                )
+            compose_file = folder / "compose.yml"
+            compose_file.write_text(content, encoding="utf-8")
         command = [
             "docker",
             "compose",
             "-p",
             project,
             "-f",
-            str(root / "docker-compose.deploy.yml"),
+            str(compose_file),
             "-f",
             str(override),
         ]
@@ -101,9 +133,14 @@ def main() -> None:
                 check=True,
             )
             base = f"http://127.0.0.1:{admin_port}"
-            for route in ["/health", "/passes", "/campaigns"]:
+            for route in ["/health", "/passes", "/campaigns", "/docs", "/redoc"]:
                 with urllib.request.urlopen(base + route, timeout=15) as response:
                     assert response.status == 200
+            with urllib.request.urlopen(base + "/openapi.json", timeout=15) as response:
+                assert (
+                    "delete"
+                    in json.load(response)["paths"]["/api/v1/merchants/{merchant_id}"]
+                )
             payload = json.dumps(
                 {
                     "username": "deployment-check",

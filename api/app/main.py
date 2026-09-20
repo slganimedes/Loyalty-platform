@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .config import settings
 from .db import init_db
@@ -86,6 +86,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def api_home() -> str:
+    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Loyalty API</title><body style="font-family:system-ui;max-width:800px;margin:60px auto;padding:24px"><h1>Loyalty Platform API</h1><p>Public API documentation</p><ul><li><a href="/docs">docs - Interactive API documentation</a></li><li><a href="/redoc">API reference</a></li><li><a href="/openapi.json">OpenAPI JSON</a></li></ul></body></html>'
 
 
 @app.get("/health", tags=["health"])

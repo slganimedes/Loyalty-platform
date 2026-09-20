@@ -33,6 +33,9 @@ export const api = {
   deleteCampaign: (mid, cid) => request(`/merchants/${mid}/campaigns/${cid}`, { method: "DELETE" }),
   ingest: (body) => request("/transactions", { method: "POST", body }),
 
+  deletionPreview: (id) => request(`/merchants/${id}/deletion-preview`),
+  deleteMerchant: (id, revision) => request(`/merchants/${id}`, {method: "DELETE", body: {revision}}),
+
   // Merchants
   listMerchants: () => request("/merchants"),
   createMerchant: (data) => request("/merchants", { method: "POST", body: data }),

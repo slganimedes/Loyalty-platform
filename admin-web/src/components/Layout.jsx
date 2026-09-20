@@ -30,13 +30,14 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">🎟️ {t("appTitle")}</div>
+        <div className="brand"><span className="brand-name">getnet<span>.</span></span><span className="brand-subtitle">{t("appTitle")}</span></div>
         <nav className="nav">
           {links.map(([to, key]) => (
             <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>
               {t(key)}
             </NavLink>
           ))}
+          <a href="/docs" target="_blank" rel="noreferrer">{t("apiDocs")} &#8599;</a>
         </nav>
         <div className="foot">
           <span className={"dot " + (apiOk ? "ok" : "bad")} />{" "}

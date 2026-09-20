@@ -1,10 +1,10 @@
 :root {
-  --red: #c81e1e;
-  --dark: #8a0f13;
-  --ink: #1a1a1a;
+  --red: #c90024;
+  --dark: #a50020;
+  --ink: #202027;
   --grey: #666;
-  --cream: #fcf6f5;
-  --line: #eee;
+  --cream: #f5f5f7;
+  --line: #e9e9ee;
 }
 * { box-sizing: border-box; }
 body {
@@ -119,3 +119,60 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .content { padding: 16px; }
   .topbar { padding: 12px 16px; gap: 10px; flex-wrap: wrap; }
 }
+
+/* Getnet red with spacious, rounded surfaces and native system typography. */
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.sidebar { width: 248px; flex-shrink: 0; padding: 32px 16px 20px; background: #fff; color: var(--ink); border-right: 1px solid var(--line); }
+.brand { padding: 0 16px 32px; display: grid; gap: 6px; }
+.brand-name { color: var(--red); font-size: 36px; font-weight: 800; letter-spacing: -2px; }
+.brand-name span { color: #ec0016; }
+.brand-subtitle { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--grey); }
+.nav a { margin: 4px 0; border: 0; padding: 13px 16px; color: #55555f; border-radius: 14px; font-weight: 550; transition: background .18s, color .18s; }
+.nav a.active { background: #fff0f2; color: #b50020; }
+.nav a:hover { background: #f5f5f7; color: var(--red); }
+.sidebar .foot { padding: 24px 16px 0; color: var(--grey); }
+.topbar { background: rgba(255,255,255,.85); backdrop-filter: blur(16px); padding: 18px 36px; }
+.content { width: 100%; max-width: 1280px; margin: 0 auto; padding: 36px; }
+h1 { font-size: clamp(26px, 3vw, 34px); letter-spacing: -1px; font-weight: 700; margin-bottom: 24px; }
+h2 { font-size: 18px; color: var(--ink); letter-spacing: -.3px; margin-bottom: 20px; }
+.card { border-radius: 24px; padding: 28px; margin-bottom: 24px; box-shadow: 0 8px 30px -16px #24243b26; }
+label { font-size: 13px; font-weight: 500; margin: 10px 0 7px; }
+input, select, textarea { background: #fafafb; border: 1px solid #dcdce3; padding: 12px 14px; border-radius: 12px; font-family: inherit; font-size: 14px; min-height: 44px; }
+input[type="checkbox"] { width: 18px; min-height: 18px; height: 18px; accent-color: var(--red); }
+input[type="color"] { padding: 5px; }
+.row { gap: 20px; }
+.row > label { flex: 1; min-width: 170px; }
+button { border-radius: 999px; padding: 12px 22px; font-weight: 600; min-height: 44px; transition: background .18s, box-shadow .18s; }
+button:hover:not(:disabled) { background: var(--dark); box-shadow: 0 4px 12px #c9002420; }
+button.ghost { border-color: #e6dce0; background: #fff; color: #ad0020; }
+button.ghost:hover:not(:disabled) { background: #fff0f2; }
+button.small { padding: 8px 14px; min-height: 36px; }
+.btns { margin-top: 20px; flex-wrap: wrap; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; background: #fafafb; }
+th, td { padding: 16px 12px; }
+tbody tr:hover { background: #fdfafb; }
+.badge { padding: 6px 10px; font-weight: 600; }
+.pill { border-radius: 50%; }
+.note { line-height: 1.6; }
+.error { padding: 12px 16px; border-radius: 12px; background: #fff0f2; }
+.login-wrap { padding: 24px; background: radial-gradient(ellipse at 15% 0%, #ffdbe2, transparent 55%), radial-gradient(ellipse at 90% 100%, #ffecee, transparent 60%), #f5f5f7; }
+.login-box { width: min(100%, 420px); padding: 40px; border-radius: 28px; box-shadow: 0 24px 80px -30px #77102b45; border: 1px solid #fff; }
+.login-box h1 { margin-bottom: 28px; }
+.enrollment-qr { border-radius: 20px; }
+dialog { border: 1px solid var(--line); border-radius: 28px; padding: 32px; width: min(560px, calc(100vw - 32px)); max-height: 90vh; color: var(--ink); box-shadow: 0 24px 100px #0003; }
+dialog::backdrop { background: #17172366; backdrop-filter: blur(5px); }
+dialog p { line-height: 1.6; }
+.deletion-summary { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.deletion-summary > div { display: flex; justify-content: space-between; padding: 12px 16px; background: #fafafb; }
+.deletion-summary dd { font-weight: 700; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #9c1645; outline-offset: 3px; }
+@media (max-width: 900px) { .sidebar { width: 205px; padding-inline: 10px; } .content { padding: 24px; } }
+@media (max-width: 700px) {
+  .sidebar { width: 100%; padding: 18px 16px 10px; border-right: 0; }
+  .brand { padding: 0 8px 16px; } .brand-name { font-size: 28px; }
+  .nav { flex-wrap: nowrap; overflow-x: auto; gap: 4px; } .nav a { white-space: nowrap; padding: 10px 14px; }
+  .content { padding: 20px 16px; } .card { padding: 20px; border-radius: 20px; }
+  .topbar { padding: 12px 20px; } .row > div, .row > label { min-width: min(100%, 180px); }
+  dialog { padding: 24px; } .login-box { padding: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

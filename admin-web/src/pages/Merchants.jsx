@@ -4,7 +4,7 @@ import { useApp } from "../context/AppContext";
 import { readLogo } from "../api/logo";
 
 export default function Merchants() {
-  const { t, selectMerchant, user } = useApp();
+  const { t, selectMerchant, user, merchantId } = useApp();
   const [merchants, setMerchants] = useState([]);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#C81E1E");
@@ -17,6 +17,26 @@ export default function Merchants() {
   const [editing, setEditing] = useState(null);
   const [err, setErr] = useState("");
 
+  const [deletion, setDeletion] = useState(null);
+  const [notice, setNotice] = useState("");
+  const dialog = useRef(null);
+  useEffect(() => { if (deletion) dialog.current?.showModal(); }, [deletion]);
+  const previewDeletion = async m => {
+    setErr(""); setSaving(true);
+    try { setDeletion({id: m.id, ...await api.deletionPreview(m.id)}); }
+    catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+  const removeMerchant = async () => {
+    setSaving(true); setErr("");
+    try {
+      const result = await api.deleteMerchant(deletion.id, deletion.revision);
+      if (merchantId === deletion.id) selectMerchant("");
+      if (editing === deletion.id) { setEditing(null); setName(""); setLogo(undefined); setPreview(""); }
+      setNotice(t(result.pending_revocations ? "merchantDeletePending" : "merchantDeleted"));
+      dialog.current.close(); setDeletion(null); load();
+    } catch (e) { setErr(e.message); dialog.current.close(); setDeletion(null); }
+    finally { setSaving(false); }
+  };
   const load = () => {
     setLoading(true);
     api.listMerchants().then(setMerchants).catch((e) => setErr(String(e))).finally(() => setLoading(false));
@@ -57,6 +77,19 @@ export default function Merchants() {
   return (
     <>
       <h1>{t("merchants")}</h1>
+      {notice && <p role="status" className="card">{notice}</p>}
+      <dialog ref={dialog} aria-labelledby="delete-title" onCancel={e => { if (saving) e.preventDefault(); else setDeletion(null); }}>
+        {deletion && <>
+          <h2 id="delete-title">{t("deleteMerchant")}: {deletion.name}</h2>
+          <p>{t("merchantDeleteIntro")}</p>
+          <dl className="deletion-summary">
+            {["customers", "campaigns", "passes", "coupons", "admins"].map(key => <div key={key}><dt>{t(key)}</dt><dd>{deletion[key]}</dd></div>)}
+          </dl>
+          <p>{t("historyRetained")}: {deletion.transactions} {t("transactions")}, {deletion.movements} {t("movements")}.</p>
+          <p className="note">{t("merchantDeleteDetails")}</p>
+          <div className="btns"><button className="ghost" autoFocus disabled={saving} onClick={() => {dialog.current.close(); setDeletion(null);}}>{t("cancel")}</button><button disabled={saving} onClick={removeMerchant}>{t("confirmMerchantDelete")}</button></div>
+        </>}
+      </dialog>
 
       {(user.role === "super_admin" || editing) && <div className="card">
         <h2>{t(editing ? "edit" : "newMerchant")}</h2>
@@ -104,7 +137,8 @@ export default function Merchants() {
                   <td>
                     <button className="small ghost" onClick={() => selectMerchant(m.id)}>{t("select")}</button>{" "}
                     <button className="small ghost" disabled={saving || reading} onClick={() => { setEditing(m.id); setName(m.name); setColor(m.pass_color); setLogo(undefined); setPreview(m.logo_url || ""); setErr(""); if (fileInput.current) fileInput.current.value = ""; }}>{t("edit")}</button>{" "}
-                    <button className="small" onClick={() => toggleStatus(m)}>{t("status")}</button>
+                    <button className="small" onClick={() => toggleStatus(m)}>{t("status")}</button>{" "}
+                    {user.role === "super_admin" && <button className="small ghost" disabled={saving} onClick={() => previewDeletion(m)}>{t("delete")}</button>}
                   </td>
                 </tr>
               ))}

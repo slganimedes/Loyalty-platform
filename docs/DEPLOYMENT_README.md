@@ -277,3 +277,20 @@ The local stack was rebuilt and both services became healthy. A verified SQLite
 backup was taken before the migration. Post-upgrade checks verified database
 integrity, foreign keys, unchanged existing record counts and HTTP access to the
 admin routes. No existing pass was revoked as part of deployment validation.
+
+
+## Merchant deletion and installer validation (2026-09-20)
+
+The backend suite passed 55 tests. The merchant/campaign subset passed again after
+serializing merchant writes against deletion. Four browser workflows passed
+(the three existing flows together, followed by the new merchant deletion flow).
+Desktop/mobile screenshots were inspected, including cancellation and the impact
+summary. Provider failures, authorization, stale summaries, access revocation and
+preservation of history are covered using synthetic records.
+
+The no-.env installer passed a complete isolated Compose deployment from a local
+source archive: standard images, source extraction, dependency installation,
+production build, health, API documentation/schema and login/logout. No real
+merchant was removed. The local stack was rebuilt after a verified SQLite backup.
+The new installer is `docker-compose.install.yml`; its private filled-in copy
+must not be committed. Documentation and creation templates have been updated.
