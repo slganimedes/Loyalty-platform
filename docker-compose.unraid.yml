@@ -3,8 +3,9 @@
 # Edit only x-installation. No .env required. Do not commit the private copy.
 # For a literal dollar sign in a value, enter $$ (Docker Compose escaping).
 x-installation:
-  SOURCE_REF: &source_ref "af3e93de9aadbd0992676fac07377dbae473de4e"
+  SOURCE_REF: &source_ref "7ce4ff5b9b869447762cde4a6b8d7c89fa009c0e"
   SOURCE_URL: &source_url ""
+  GITHUB_TOKEN: &github_token ""
   PAN_HASH_SECRET: &pan_secret "REPLACE_WITH_STABLE_RANDOM_SECRET"
   BOOTSTRAP_ADMIN_USERNAME: &admin_user "admin"
   BOOTSTRAP_ADMIN_PASSWORD: &admin_password "REPLACE_WITH_RANDOM_PASSWORD"
@@ -27,6 +28,7 @@ services:
     environment:
       SOURCE_REF: *source_ref
       SOURCE_URL: *source_url
+      GITHUB_TOKEN: *github_token
     volumes:
       - source:/source
     entrypoint: ["python", "-c"]
@@ -42,7 +44,17 @@ services:
             with tempfile.TemporaryDirectory(dir=root) as scratch:
                 scratch = pathlib.Path(scratch)
                 archive = scratch / 'source.tar.gz'
-                with urllib.request.urlopen(os.environ.get('SOURCE_URL') or ('https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/' + ref), timeout=60) as response, archive.open('wb') as output:
+                token = os.environ.get('GITHUB_TOKEN', '')
+                url = os.environ.get('SOURCE_URL')
+                headers = {}
+                if not url:
+                    if token:
+                        url = 'https://api.github.com/repos/slganimedes/Loyalty-platform/tarball/' + ref
+                        headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}
+                    else:
+                        url = 'https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/' + ref
+                request = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(request, timeout=60) as response, archive.open('wb') as output:
                     shutil.copyfileobj(response, output)
                 unpack = scratch / 'unpack'
                 unpack.mkdir()
