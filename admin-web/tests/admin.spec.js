@@ -40,6 +40,7 @@ test("real login, merchant/customer/campaign/coupon/payment, wallet toggles and 
   await page.getByRole("button", {name: "Enroll", exact: true}).click();
   await expect(page.getByRole("row").filter({hasText: "BROWSER-C1"})).toBeVisible();
   await page.getByRole("link", {name: "Campaigns", exact: true}).click();
+  await page.getByLabel("Name", {exact: true}).fill("Browser points campaign");
   await page.getByRole("button", {name: "Create", exact: true}).click();
   await expect(page.getByRole("cell", {name: "Points per spend", exact: true})).toBeVisible();
   await page.getByRole("link", {name: "Coupons", exact: true}).click();
@@ -67,7 +68,7 @@ test("real login, merchant/customer/campaign/coupon/payment, wallet toggles and 
   await page.getByRole("button", {name: "Movements", exact: true}).click();
   await expect(page.getByRole("cell", {name: "Points earned", exact: true})).toHaveCount(2);
   await page.getByRole("button", {name: "Wallet passes"}).click();
-  await expect(page.getByText("No passes available.", {exact: false})).toBeVisible();
+  await expect(page.getByText("No passes assigned.", {exact: false})).toBeVisible();
   await page.getByRole("link", {name: "Wallet settings", exact: true}).click();
   await page.getByLabel("Certificate password", {exact: true}).fill("synthetic-browser-secret");
   await page.getByLabel("Enabled Apple Wallet").check();
@@ -126,4 +127,53 @@ test("payment clients follow the merchant and lost responses retry without doubl
   await page.getByLabel("Merchant", {exact: true}).selectOption(first.id);
   await expect(page.getByLabel("Customer", {exact: true})).toHaveValue("");
   await expect(page.getByLabel("Amount", {exact: false})).toHaveValue("");
+});
+
+test("campaign pass assignment shows URL and QR and supports parent deletions", async ({ page, request }) => {
+  const response = await request.post("/api/v1/auth/login", {data: {username: "browser-admin", password: "browser-test-password"}});
+  const {access_token: token} = await response.json();
+  const headers = {Authorization: `Bearer ${token}`};
+  await request.patch("/api/v1/users/me", {headers, data: {language: "en"}});
+  const merchant = await (await request.post("/api/v1/merchants", {headers, data: {name: "Campaign pass shop"}})).json();
+  const enrolled = await (await request.post(`/api/v1/merchants/${merchant.id}/customers`, {headers, data: {customer_code: "PASS-C1"}})).json();
+  const customer = enrolled.customer;
+  const campaigns = [];
+  for (const name of ["Coffee rewards", "Lunch rewards"]) {
+    campaigns.push(await (await request.post(`/api/v1/merchants/${merchant.id}/campaigns`, {headers, data: {name, type: "points_per_spend", config: {points: 1, amount_unit: 10}}})).json());
+  }
+  await request.put("/api/v1/settings/wallet/google", {headers, data: {enabled: true, config: {issuer_id: "123", sa_json: "__missing_browser_test_credentials__"}}});
+  // Keep real assignment persistence and authorization; substitute only provider delivery.
+  await page.route(`**/customers/${customer.id}/passes`, async route => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    const body = await response.json();
+    await route.fulfill({response, json: {...body, provider_synced: true, url: `https://pay.google.com/gp/v/save/browser-${body.pass.id}`}});
+  });
+  await page.addInitScript(token => sessionStorage.setItem("token", token), token);
+  await page.goto("/passes");
+  await page.getByLabel("Merchant", {exact: true}).selectOption(merchant.id);
+  for (const campaign of campaigns) {
+    await page.getByLabel("Campaign", {exact: true}).selectOption(campaign.id);
+    await page.getByLabel("Customer", {exact: true}).selectOption(customer.id);
+    await page.getByRole("button", {name: "Assign pass", exact: true}).click();
+    await expect(page.getByLabel("Enrollment URL")).toHaveValue(/https:\/\/pay.google.com\/gp\/v\/save\/browser-/);
+    await expect(page.getByAltText("Wallet enrollment QR")).toBeVisible();
+    expect(await page.getByAltText("Wallet enrollment QR").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
+  }
+  await expect(page.getByRole("row").filter({hasText: "PASS-C1"})).toHaveCount(2);
+  page.on("dialog", dialog => dialog.accept());
+  await page.getByRole("row").filter({hasText: "Coffee rewards"}).getByRole("button", {name: "Delete", exact: true}).click();
+  await expect(page.getByRole("status")).toContainText("revocation is pending");
+  await expect(page.getByRole("row").filter({hasText: "Coffee rewards"})).toContainText("Deleted");
+  await page.getByRole("link", {name: "Campaigns", exact: true}).click();
+  await page.getByRole("row").filter({hasText: "Lunch rewards"}).getByRole("button", {name: "Delete", exact: true}).click();
+  await expect(page.getByRole("row").filter({hasText: "Lunch rewards"})).toHaveCount(0);
+  await page.getByRole("link", {name: "Customers", exact: true}).click();
+  await page.getByRole("row").filter({hasText: "PASS-C1"}).getByRole("button", {name: "Delete", exact: true}).click();
+  await expect(page.getByRole("row").filter({hasText: "PASS-C1"})).toHaveCount(0);
+  await page.getByRole("link", {name: "Wallet passes", exact: true}).click();
+  await expect(page.getByRole("row").filter({hasText: "PASS-C1"})).toHaveCount(2);
+  await expect(page.getByRole("button", {name: "Retry revocation"})).toHaveCount(2);
+  await request.put("/api/v1/settings/wallet/google", {headers, data: {enabled: false}});
 });

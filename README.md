@@ -66,6 +66,21 @@ CLAUDE.md       Briefing for the IDE AI agent (Claude Code)
 ```
 
 ## Deployment
+For standalone deployment using **standard container images and source downloaded
+from GitHub**, use `docker-compose.deploy.yml` and follow
+[the Compose deployment guide](docs/COMPOSE_DEPLOYMENT.md).
+`docker-compose.yml` remains the local development stack for unpublished changes.
+
+## Campaign passes and deletion
+
+Passes belong to campaigns and are assigned explicitly to customers. Customer
+enrollment no longer issues passes. **Wallet passes** lets administrators select
+campaign, customer and provider, then view the installation URL and scan its QR.
+Customers, campaigns and passes can be deleted; affected passes are revoked with
+Google/Apple, with persistent automatic retries if a provider is unavailable.
+History is preserved. See [the functional guide](docs/CAMPAIGN_PASSES.md).
+
+## Provider and network setup
 See **`docs/Unraid_Cloudflare.md`** (Unraid + Cloudflare Tunnel, `slmartinez.org`) and
 **`docs/DEPLOYMENT_README.md`** (setup, wallet credentials, validation and remaining acceptance checks).
 

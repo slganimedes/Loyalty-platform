@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useApp } from "../context/AppContext";
 import MerchantPicker from "../components/MerchantPicker";
@@ -8,14 +9,16 @@ export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [form, setForm] = useState({ customer_code: "", email: "", dni: "", card_hash: "" });
   const [movements, setMovements] = useState(null);
-  const [links, setLinks] = useState(null);
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const [err, setErr] = useState("");
 
   const load = () => {
     if (!merchantId) return;
     api.listCustomers(merchantId).then(setCustomers).catch((e) => setErr(String(e)));
   };
-  useEffect(() => { setCustomers([]); setMovements(null); setLinks(null); setErr(""); load(); }, [merchantId]);
+  useEffect(() => { setCustomers([]); setMovements(null); setErr(""); setNotice(""); load(); }, [merchantId]);
 
   const enroll = async (e) => {
     e.preventDefault();
@@ -36,13 +39,21 @@ export default function Customers() {
     try { const m = await api.getMovements(cid); setMovements({ cid, list: m }); } catch (e) { setErr(e.message); }
   };
 
-  const showPasses = async (cid) => {
-    try { const r = await api.refreshPasses(cid); setLinks(r.pass_links); load(); } catch (e) { setErr(e.message); }
+  const removeCustomer = async (cid) => {
+    if (!window.confirm(t("deleteCustomerConfirm"))) return;
+    setBusy(true); setErr("");
+    try {
+      const result = await api.deleteCustomer(cid);
+      setCustomers(items => items.filter(c => c.id !== cid));
+      setMovements(null);
+      setNotice(t(result.pending_revocations ? "deletionPending" : "deletedSuccessfully"));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
     <>
       <h1>{t("customers")}</h1>
       <MerchantPicker />
+      {notice && <p role="status">{notice}</p>}
 
       {!merchantId ? (
         <p className="note">{t("selectMerchantFirst")}</p>
@@ -90,14 +101,13 @@ export default function Customers() {
                     <td>{c.customer_code}</td>
                     <td className="note">{c.email || "—"}</td>
                     <td><strong>{c.points_balance}</strong> {t("points")}</td>
-                    <td><button className="small ghost" onClick={() => showMovements(c.id)}>{t("movements")}</button>{" "}<button className="small ghost" onClick={() => showPasses(c.id)}>{t("passes")}</button></td>
+                    <td><button className="small ghost" onClick={() => showMovements(c.id)}>{t("movements")}</button>{" "}<button className="small ghost" onClick={() => navigate(`/passes?customer=${c.id}`)}>{t("passes")}</button>{" "}<button className="small ghost" disabled={busy} onClick={() => removeCustomer(c.id)}>{t("delete")}</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {links && <div className="card"><h2>{t("passes")}</h2>{Object.keys(links).length === 0 ? <p>{t("noPasses")}</p> : Object.entries(links).map(([provider, url]) => <p key={provider}><a href={url} target="_blank" rel="noreferrer">{t(provider)}</a></p>)}</div>}
           {movements && (
             <div className="card">
               <h2>{t("movements")} · {movements.cid.slice(0, 8)}…</h2>

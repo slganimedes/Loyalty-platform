@@ -14,7 +14,7 @@ from . import passes
 def match_customer(
     db: Session, merchant_id: str, ids: TransactionIdentifiers
 ) -> models.Customer | None:
-    query = db.query(models.Customer).filter_by(merchant_id=merchant_id)
+    query = db.query(models.Customer).filter_by(merchant_id=merchant_id, deleted=False)
     for field, value in (
         ("card_hash", ids.card_hash),
         ("customer_code", ids.customer_number),
@@ -70,7 +70,11 @@ def apply_campaigns(
     transaction_id: str,
 ) -> int:
     total = 0
-    campaigns = db.query(models.Campaign).filter_by(merchant_id=merchant_id, active=True).all()
+    campaigns = (
+        db.query(models.Campaign)
+        .filter_by(merchant_id=merchant_id, active=True, deleted=False)
+        .all()
+    )
     for campaign in campaigns:
         if campaign.type == "points_per_spend" and amount:
             delta = _points_for_spend(campaign.config, amount)

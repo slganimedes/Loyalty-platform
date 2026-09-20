@@ -79,6 +79,7 @@ class MovementOut(BaseModel):
 
 # ---------- Campaign ----------
 class CampaignCreate(BaseModel):
+    name: str = Field(default="Campaign", min_length=1, max_length=200)
     type: Literal["points_per_spend", "interaction", "coupon"]
     config: dict
     active: bool = True
@@ -117,9 +118,15 @@ class CampaignOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     merchant_id: str
+    name: str
     type: str
     config: dict
     active: bool
+
+
+class PassAssignment(BaseModel):
+    campaign_id: str
+    platform: Literal["apple", "google"]
 
 
 # ---------- Coupon ----------

@@ -18,6 +18,10 @@ async function request(path, { method = "GET", body } = {}) {
 }
 
 export const api = {
+  listPasses: (mid) => request(`/merchants/${mid}/passes`),
+  assignPass: (cid, body) => request(`/customers/${cid}/passes`, { method: "POST", body }),
+  passLink: (cid, pid) => request(`/customers/${cid}/passes/${pid}/link`, { method: "POST" }),
+  deleteCustomer: (cid) => request(`/customers/${cid}`, { method: "DELETE" }),
   login: (body) => request("/auth/login", { method: "POST", body }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/users/me"),
@@ -25,6 +29,8 @@ export const api = {
   health: async () => { const r = await fetch("/health"); if (!r.ok) throw new Error("API unavailable"); return r.json(); },
   getPasses: (cid) => request(`/customers/${cid}/passes`),
   refreshPasses: (cid) => request(`/customers/${cid}/passes/refresh`, { method: "POST" }),
+  deletePass: (cid, pid) => request(`/customers/${cid}/passes/${pid}`, { method: "DELETE" }),
+  deleteCampaign: (mid, cid) => request(`/merchants/${mid}/campaigns/${cid}`, { method: "DELETE" }),
   ingest: (body) => request("/transactions", { method: "POST", body }),
 
   // Merchants

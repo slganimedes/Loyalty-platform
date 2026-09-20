@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -111,9 +112,7 @@ def enroll_customer(
         db.rollback()
         raise HTTPException(409, "Customer code already exists")
     db.refresh(c)
-    links = passes.issue_pass_links(db, c)
-    db.commit()
-    return {"customer": CustomerOut.model_validate(c).model_dump(), "pass_links": links}
+    return {"customer": CustomerOut.model_validate(c).model_dump(), "pass_links": {}}
 
 
 @router.get("/merchants/{merchant_id}/customers", response_model=list[CustomerOut])
@@ -122,7 +121,7 @@ def list_customers(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> list[models.Customer]:
-    return db.query(models.Customer).filter(models.Customer.merchant_id == merchant_id).all()
+    return db.query(models.Customer).filter_by(merchant_id=merchant_id, deleted=False).all()
 
 
 # ---------- Campaigns ----------
@@ -150,7 +149,28 @@ def list_campaigns(
     db: Session = Depends(get_db),
     merchant: models.Merchant = Depends(merchant_access),
 ) -> list[models.Campaign]:
-    return db.query(models.Campaign).filter(models.Campaign.merchant_id == merchant_id).all()
+    return db.query(models.Campaign).filter_by(merchant_id=merchant_id, deleted=False).all()
+
+
+@router.delete("/merchants/{merchant_id}/campaigns/{campaign_id}")
+def delete_campaign(
+    merchant_id: str,
+    campaign_id: str,
+    db: Session = Depends(get_db),
+    merchant: models.Merchant = Depends(merchant_access),
+) -> dict:
+    db.commit()
+    db.execute(text("BEGIN IMMEDIATE"))
+    campaign = db.get(models.Campaign, campaign_id)
+    if not campaign or campaign.merchant_id != merchant_id:
+        raise HTTPException(404, "Campaign not found")
+    campaign.active = False
+    campaign.deleted = True
+    rows = db.query(models.Pass).filter_by(campaign_id=campaign_id).all()
+    passes.mark_revoked(db, rows)
+    db.commit()
+    pending = sum(not passes.revoke_pass(db, row.customer, row.id) for row in rows)
+    return {"status": "deleted", "pending_revocations": pending}
 
 
 # ---------- Coupons ----------
@@ -164,7 +184,7 @@ def issue_coupon(
     if not db.get(models.Merchant, merchant_id):
         raise HTTPException(404, "Merchant not found")
     customer = db.get(models.Customer, body.customer_id)
-    if not customer or customer.merchant_id != merchant_id:
+    if not customer or customer.deleted or customer.merchant_id != merchant_id:
         raise HTTPException(404, "Customer not found in merchant")
     coupon = models.Coupon(
         merchant_id=merchant_id, customer_id=body.customer_id, amount=body.amount

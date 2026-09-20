@@ -6,6 +6,8 @@ import MerchantPicker from "../components/MerchantPicker";
 export default function Campaigns() {
   const { t, merchantId } = useApp();
   const [campaigns, setCampaigns] = useState([]);
+  const [name, setName] = useState("");
+  const [notice, setNotice] = useState("");
   const [type, setType] = useState("points_per_spend");
   const [points, setPoints] = useState(1);
   const [unit, setUnit] = useState(10);
@@ -15,6 +17,14 @@ export default function Campaigns() {
   const [reward, setReward] = useState("");
   const [active, setActive] = useState(true);
   const [err, setErr] = useState("");
+  const [deleting, setDeleting] = useState(null);
+  const remove = async (id) => {
+    if (!window.confirm(t("deleteCampaignConfirm"))) return;
+    setDeleting(id); setErr("");
+    try { const result = await api.deleteCampaign(merchantId, id); setCampaigns(items => items.filter(c => c.id !== id)); setNotice(t(result.pending_revocations ? "deletionPending" : "deletedSuccessfully")); }
+    catch (e) { setErr(e.message); }
+    finally { setDeleting(null); }
+  };
 
   const load = () => {
     if (!merchantId) return;
@@ -32,7 +42,8 @@ export default function Campaigns() {
     e.preventDefault();
     setErr("");
     try {
-      await api.createCampaign(merchantId, { type, config: buildConfig(), active });
+      await api.createCampaign(merchantId, { name, type, config: buildConfig(), active });
+      setName("");
       load();
     } catch (e) { setErr(String(e)); }
   };
@@ -49,6 +60,7 @@ export default function Campaigns() {
           <div className="card">
             <h2>{t("campaigns")}</h2>
             <form onSubmit={create}>
+              <label>{t("name")}<input required maxLength={200} value={name} onChange={e => setName(e.target.value)} /></label>
               <label>{t("type")}</label>
               <select aria-label={t("type")} value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="points_per_spend">{t("points_per_spend")}</option>
@@ -85,15 +97,18 @@ export default function Campaigns() {
           </div>
 
           <div className="card">
+            {notice && <p role="status">{notice}</p>}
             <table>
-              <thead><tr><th>{t("type")}</th><th>{t("config")}</th><th>{t("active")}</th></tr></thead>
+              <thead><tr><th>{t("name")}</th><th>{t("type")}</th><th>{t("config")}</th><th>{t("active")}</th><th>{t("actions")}</th></tr></thead>
               <tbody>
-                {campaigns.length === 0 && <tr><td colSpan="3" className="note">{t("noData")}</td></tr>}
+                {campaigns.length === 0 && <tr><td colSpan="5" className="note">{t("noData")}</td></tr>}
                 {campaigns.map((c) => (
                   <tr key={c.id}>
+                    <td>{c.name}</td>
                     <td>{t(c.type) !== c.type ? t(c.type) : c.type}</td>
                     <td className="note">{c.type === "points_per_spend" ? `${c.config.points} ${t("points")} / ${c.config.amount_unit} EUR (${t(c.config.rounding)})` : c.type === "interaction" ? `${c.config.interactions_required}: ${c.config.reward_description}` : `${c.config.amount} EUR`}</td>
                     <td><span className={"badge " + (c.active ? "active" : "inactive")}>{t(c.active ? "active" : "inactive")}</span></td>
+                    <td><button className="small ghost" disabled={deleting !== null} onClick={() => remove(c.id)}>{t("delete")}</button></td>
                   </tr>
                 ))}
               </tbody>

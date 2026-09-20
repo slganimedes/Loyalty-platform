@@ -51,6 +51,7 @@ on Unraid, exposed through Cloudflare Tunnel (domain slmartinez.org).
 5. No secrets in git; .env.example updated if new vars added.
 
 ## Do NOT
+- Do not push or publish to GitHub without an explicit user instruction.
 - Do not invent scope beyond the PRD (Phase 2 items are OUT).
 - Do not run destructive commands (rm -rf, sudo, git push --force).
 - Do not commit secrets or the SQLite DB.

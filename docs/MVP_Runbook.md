@@ -33,5 +33,15 @@ Two tracks run in parallel: **A. Build** (offline with mock data) and **B. Accou
 - React admin with authentication and persisted ES/EN, Docker packaging and browser tests.
 
 ## Definition of done
-`docker compose up` runs the stack; `/health` + `/docs` respond; `pytest` green (45 tests);
+`docker compose up` runs the stack; `/health` + `/docs` respond; `pytest` green (52 tests);
 admin web does what the API does and switches ES/EN; no secrets in git.
+
+## Campaign passes and standalone deployment (2026-09-20)
+
+Passes are assigned explicitly to a customer and campaign. The admin displays
+installation URLs and QR codes and supports deletion of customers, campaigns and
+passes with durable provider revocation retries. Existing unassociated passes are
+retained as legacy. See [CAMPAIGN_PASSES.md](CAMPAIGN_PASSES.md).
+
+Use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md) for standard containers that
+download source from GitHub. Publication requires an explicit user request.

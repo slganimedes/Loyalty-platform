@@ -1,5 +1,6 @@
 """FastAPI entrypoint for the SME Loyalty Platform."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,7 +12,15 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import init_db
-from .routers import auth, customers, merchants, settings_wallet, transactions, wallet_passes
+from .routers import (
+    assignments,
+    auth,
+    customers,
+    merchants,
+    settings_wallet,
+    transactions,
+    wallet_passes,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,7 +47,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     )
                 )
                 db.commit()
-    yield
+    from .services.passes import retry_pending_revocations
+
+    stop = asyncio.Event()
+
+    async def retry_worker() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.to_thread(retry_pending_revocations)
+            except Exception as exc:
+                logging.getLogger("passes").warning(
+                    "Revocation retry failed: %s", type(exc).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=30)
+            except TimeoutError:
+                pass
+
+    worker = asyncio.create_task(retry_worker())
+    try:
+        yield
+    finally:
+        stop.set()
+        await worker
 
 
 app = FastAPI(
@@ -64,6 +95,7 @@ def health() -> dict:
 
 app.include_router(merchants.router)
 app.include_router(customers.router)
+app.include_router(assignments.router)
 app.include_router(transactions.router)
 app.include_router(settings_wallet.router)
 app.include_router(auth.router)

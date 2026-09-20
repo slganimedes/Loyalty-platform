@@ -8,6 +8,7 @@ import Campaigns from "./pages/Campaigns";
 import Coupons from "./pages/Coupons";
 import Transactions from "./pages/Transactions";
 import WalletConfig from "./pages/WalletConfig";
+import Passes from "./pages/Passes";
 
 function RequireAuth({ children }) {
   const { user, ready, t } = useApp();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/coupons" element={<Coupons />} />
         <Route path="/wallet" element={<WalletConfig />} />
+        <Route path="/passes" element={<Passes />} />
         <Route path="/transactions" element={<Transactions />} />
       </Route>
       <Route path="*" element={<Navigate to="/merchants" replace />} />

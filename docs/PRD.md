@@ -12,8 +12,8 @@ competition by bundling a value-added loyalty service.
 Future layers (OUT of MVP): cross-merchant proximity offers; business intelligence for merchants.
 
 ## 2. Goal of the MVP
-Register multiple merchants → register multiple customers → issue wallet pass →
-accrue points per transaction (real-time pass update).
+Register merchants, customers and campaigns; explicitly assign campaign passes
+to customers, then accrue rewards per transaction and update the assigned passes.
 
 ## 3. Roles
 - **Super Admin** (bank): all merchants + wallet config.
@@ -46,7 +46,14 @@ Admin auth: username + password.
 - On accrual → update pass in real time.
 
 ## 7. Passes
-Content: points balance, merchant name, latest movements, customer code, QR.
+Passes belong to campaigns and are explicitly assigned to customers of the same merchant.
+One active pass per customer/campaign/provider; enrollment never creates passes automatically.
+Admin shows the installation URL and its QR. The QR inside a pass identifies the customer.
+Content: campaign name and balance, merchant name, campaign movements, customer code, QR.
+Customers/campaigns can be soft-deleted and passes revoked; Google receives INACTIVE,
+Apple receives a voided pass and APNs notification. Failed revocations retry durably.
+Existing passes without a campaign remain labelled legacy; no automatic reassignment.
+See [campaign pass behavior](CAMPAIGN_PASSES.md) for endpoints and retention semantics.
 Per-merchant branding: color, name, logo. Real-time update (Apple APNs + web service; Google API patch).
 
 ## 8. Data model (SQLite)
@@ -72,4 +79,7 @@ See `api/app/models/__init__.py` for the authoritative schema.
 Unraid (Docker Compose Manager) + Cloudflare Tunnel. Public hostnames:
 `api.slmartinez.org` → api:8000 ; `admin.slmartinez.org` → admin-web:80.
 Pass web-service URLs must use the public HTTPS domain, never a local IP.
-See `docs/Unraid_Cloudflare.md` and `docs/DEPLOYMENT_README.md`.
+Use standalone `docker-compose.deploy.yml` with standard Python/Node/Nginx images;
+source is downloaded from a pinned GitHub commit. No custom application images required.
+See [Compose deployment](COMPOSE_DEPLOYMENT.md), `Unraid_Cloudflare.md` and `DEPLOYMENT_README.md`.
+Do not publish to GitHub without an explicit user request.

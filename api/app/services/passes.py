@@ -102,11 +102,24 @@ def _next_tag(db: Session) -> int:
     return max(time.time_ns() // 1000000, maximum + 1)
 
 
-def ensure_pass(db: Session, customer: models.Customer, platform: str, config: dict) -> models.Pass:
-    row = db.query(models.Pass).filter_by(customer_id=customer.id, platform=platform).first()
+def ensure_pass(
+    db: Session,
+    customer: models.Customer,
+    platform: str,
+    config: dict,
+    campaign_id: str | None = None,
+) -> models.Pass:
+    row = (
+        db.query(models.Pass)
+        .filter_by(
+            customer_id=customer.id, platform=platform, campaign_id=campaign_id, status="active"
+        )
+        .first()
+    )
     if not row:
         row = models.Pass(
             customer_id=customer.id,
+            campaign_id=campaign_id,
             platform=platform,
             auth_token=secrets.token_urlsafe(32),
             updated_tag=_next_tag(db),
@@ -122,17 +135,34 @@ def ensure_pass(db: Session, customer: models.Customer, platform: str, config: d
         row.pass_type_id = config["pass_type_id"]
         row.external_pass_id = row.id
     else:
-        external_id = f"{config['issuer_id']}.{customer.id.replace('-', '')}"
+        suffix = row.id if row.campaign_id else customer.id
+        external_id = f"{config['issuer_id']}.{suffix.replace('-', '')}"
         if row.external_pass_id and row.external_pass_id != external_id:
             raise ValueError("Existing passes require the original issuer ID")
         row.external_pass_id = external_id
     return row
 
 
-def _recent_movements(db: Session, customer: models.Customer) -> str:
+def campaign_balance(db: Session, customer: models.Customer, row: models.Pass) -> int:
+    if not row.campaign_id:
+        return customer.points_balance
+    query = db.query(models.Movement).filter_by(
+        customer_id=customer.id, campaign_id=row.campaign_id
+    )
+    if row.campaign.type == "interaction":
+        return query.filter_by(type="interaction").count()
+    return int(
+        query.with_entities(func.coalesce(func.sum(models.Movement.points_delta), 0)).scalar()
+    )
+
+
+def _recent_movements(
+    db: Session, customer: models.Customer, campaign_id: str | None = None
+) -> str:
     rows = (
         db.query(models.Movement)
         .filter_by(customer_id=customer.id)
+        .filter(models.Movement.campaign_id == campaign_id if campaign_id else True)
         .order_by(models.Movement.created_at.desc(), models.Movement.id.desc())
         .limit(5)
         .all()
@@ -188,12 +218,13 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
     rgb = tuple(bytes.fromhex(merchant.pass_color.lstrip("#")))
     payload = {
         "formatVersion": 1,
+        "voided": row.status == "revoked",
         "passTypeIdentifier": row.pass_type_id,
         "serialNumber": row.id,
         "teamIdentifier": config["team_id"],
         "organizationName": merchant.name,
-        "description": f"{merchant.name} Loyalty",
-        "logoText": merchant.name,
+        "description": row.campaign.name if row.campaign else f"{merchant.name} Loyalty",
+        "logoText": row.campaign.name if row.campaign else merchant.name,
         "backgroundColor": f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})",
         "foregroundColor": "rgb(255, 255, 255)",
         "labelColor": "rgb(255, 255, 255)",
@@ -208,7 +239,13 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
         ],
         "storeCard": {
             "primaryFields": [
-                {"key": "points", "label": "Points / Puntos", "value": customer.points_balance}
+                {
+                    "key": "points",
+                    "label": "Stamps / Sellos"
+                    if row.campaign and row.campaign.type == "interaction"
+                    else "Points / Puntos",
+                    "value": campaign_balance(db, customer, row),
+                }
             ],
             "secondaryFields": [
                 {"key": "customer", "label": "Customer / Cliente", "value": customer.customer_code}
@@ -217,7 +254,7 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
                 {
                     "key": "movements",
                     "label": "Latest movements / Movimientos",
-                    "value": _recent_movements(db, customer),
+                    "value": _recent_movements(db, customer, row.campaign_id),
                 },
                 {"key": "coupons", "label": "Coupons / Cupones", "value": _coupons(db, customer)},
             ],
@@ -328,14 +365,19 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
     credentials = _google_credentials(config)
     credentials.refresh(Request())
     merchant = customer.merchant
-    class_id = f"{config['issuer_id']}.merchant_{merchant.id.replace('-', '')}"
+    class_suffix = (
+        f"campaign_{row.campaign_id.replace('-', '')}"
+        if row.campaign_id
+        else f"merchant_{merchant.id.replace('-', '')}"
+    )
+    class_id = f"{config['issuer_id']}.{class_suffix}"
     logo_url = public_https_url(settings.public_api_url) + (
         merchant.logo_url or f"/api/v1/wallet/merchants/{merchant.id}/logo.png"
     )
     class_body = {
         "id": class_id,
         "issuerName": merchant.name,
-        "programName": merchant.name,
+        "programName": row.campaign.name if row.campaign else merchant.name,
         "programLogo": {"sourceUri": {"uri": logo_url}},
         "reviewStatus": "UNDER_REVIEW",
         "hexBackgroundColor": merchant.pass_color,
@@ -346,13 +388,18 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
         "state": "ACTIVE",
         "accountId": customer.customer_code,
         "accountName": customer.customer_code,
-        "loyaltyPoints": {"label": "Points / Puntos", "balance": {"int": customer.points_balance}},
+        "loyaltyPoints": {
+            "label": "Stamps / Sellos"
+            if row.campaign and row.campaign.type == "interaction"
+            else "Points / Puntos",
+            "balance": {"int": campaign_balance(db, customer, row)},
+        },
         "barcode": {"type": "QR_CODE", "value": customer.customer_code},
         "textModulesData": [
             {
                 "id": "movements",
                 "header": "Movements / Movimientos",
-                "body": _recent_movements(db, customer),
+                "body": _recent_movements(db, customer, row.campaign_id),
             },
             {"id": "coupons", "header": "Coupons / Cupones", "body": _coupons(db, customer)},
         ],
@@ -390,28 +437,36 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
 
 
 @serialize_customer
-def issue_pass_links(db: Session, customer: models.Customer) -> dict:
+def issue_pass_links(db: Session, customer: models.Customer, pass_id: str | None = None) -> dict:
     cfg = _wallet_config(db)
     links = {}
     if not cfg:
         return links
-    for provider in ("apple", "google"):
+    for row in db.query(models.Pass).filter_by(customer_id=customer.id, status="active").all():
+        if pass_id is not None and row.id != pass_id:
+            continue
+        provider = row.platform
+        link_key = row.id if row.campaign_id else provider
+        if customer.deleted or (row.campaign and row.campaign.deleted):
+            continue
         if not getattr(cfg, f"{provider}_enabled"):
             continue
         try:
             config = provider_config(cfg, provider)
-            row = ensure_pass(db, customer, provider, config)
             db.commit()
             if row.status != "active":
                 continue
             if provider == "apple":
                 apple_bundle(db, customer, row, config)  # Only return an installable link.
-                links[provider] = (
+                if not db.query(models.DeviceRegistration).filter_by(pass_id=row.id).first():
+                    row.synced_tag = row.updated_tag
+                    db.commit()
+                links[link_key] = (
                     public_https_url(settings.public_api_url)
                     + f"/api/v1/passes/apple/{row.id}.pkpass?token={row.auth_token}"
                 )
             else:
-                links[provider] = google_sync(db, customer, row, config)
+                links[link_key] = google_sync(db, customer, row, config)
                 row.synced_tag = row.updated_tag
                 db.commit()
         except Exception as exc:
@@ -423,17 +478,67 @@ def issue_pass_links(db: Session, customer: models.Customer) -> dict:
 
 
 @serialize_customer
+def revoke_pass(db: Session, customer: models.Customer, pass_id: str) -> bool:
+    row = db.get(models.Pass, pass_id)
+    if not row or row.customer_id != customer.id:
+        raise ValueError("Pass not found")
+    if row.status != "revoked":
+        row.status = "revoked"
+        row.updated_tag = _next_tag(db)
+        db.commit()  # Block new links even if the provider is unavailable.
+    if row.synced_tag == row.updated_tag:
+        return True
+    try:
+        cfg = _wallet_config(db)
+        if not cfg:
+            return False
+        config = provider_config(cfg, row.platform)
+        if row.platform == "google":
+            if row.external_pass_id:
+                credentials = _google_credentials(config)
+                credentials.refresh(Request())
+                with httpx.Client(
+                    timeout=15, headers={"Authorization": f"Bearer {credentials.token}"}
+                ) as client:
+                    response = client.patch(
+                        f"{GOOGLE_BASE}/loyaltyObject/{row.external_pass_id}",
+                        json={"state": "INACTIVE"},
+                    )
+                    if response.status_code != 404:
+                        response.raise_for_status()
+        else:
+            registrations = db.query(models.DeviceRegistration).filter_by(pass_id=row.id).count()
+            if registrations:
+                if not cfg.apple_enabled:
+                    return False
+                apple_bundle(db, customer, row, config)
+                if not push_apple(db, row, config):
+                    return False
+        row.synced_tag = row.updated_tag
+        db.commit()
+        return True
+    except Exception as exc:
+        db.rollback()
+        logger.warning(
+            "Wallet revocation pending: provider=%s kind=%s", row.platform, type(exc).__name__
+        )
+        return False
+
+
+@serialize_customer
 def update_customer_pass(db: Session, customer: models.Customer) -> bool:
     cfg = _wallet_config(db)
     if not cfg:
         return False
     updated = False
-    for provider in ("apple", "google"):
+    for row in db.query(models.Pass).filter_by(customer_id=customer.id, status="active").all():
+        provider = row.platform
+        if customer.deleted or (row.campaign and row.campaign.deleted):
+            continue
         if not getattr(cfg, f"{provider}_enabled"):
             continue
         try:
             config = provider_config(cfg, provider)
-            row = ensure_pass(db, customer, provider, config)
             if row.status != "active":
                 continue
             row.updated_tag = _next_tag(db)
@@ -454,3 +559,30 @@ def update_customer_pass(db: Session, customer: models.Customer) -> bool:
                 "Wallet update pending: provider=%s kind=%s", provider, type(exc).__name__
             )
     return updated
+
+
+def mark_revoked(db: Session, rows: list[models.Pass]) -> None:
+    """Persist revocation intent in the same transaction as a parent deletion."""
+    for row in rows:
+        if row.status != "revoked":
+            row.status = "revoked"
+            row.updated_tag = _next_tag(db)
+
+
+def retry_pending_revocations() -> None:
+    from ..db import SessionLocal
+
+    with SessionLocal() as db:
+        ids = [
+            row.id
+            for row in db.query(models.Pass)
+            .filter(
+                models.Pass.status == "revoked", models.Pass.updated_tag != models.Pass.synced_tag
+            )
+            .all()
+        ]
+    for pass_id in ids:
+        with SessionLocal() as db:
+            row = db.get(models.Pass, pass_id)
+            if row:
+                revoke_pass(db, row.customer, row.id)

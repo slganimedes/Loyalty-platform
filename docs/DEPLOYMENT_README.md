@@ -1,5 +1,9 @@
 # Running and deploying the MVP
 
+For deployment from a standalone Compose file with standard images and source from
+GitHub, use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md). The stack below builds
+local development code.
+
 ## Local Docker stack
 
 Requirements: Python 3.12 for setup; a running Docker engine with Compose v2.
@@ -85,7 +89,9 @@ Values can come from `.env`; saved provider settings override those values.
 Secrets are masked on reads; blank/masked fields preserve existing values on save.
 Place credential files in ignored `data/certs`, mounted read-only at `/certs`.
 Provider errors never roll back a committed payment; failed updates retain an
-unsynced update tag. Use **Customers > Wallet passes** to retry and obtain links.
+unsynced update tag. Use **Passes > URL and QR** to retry and obtain links for an assigned campaign pass.
+Customer enrollment does not issue a pass; assign it explicitly from **Passes**.
+See [CAMPAIGN_PASSES.md](CAMPAIGN_PASSES.md) for assignment, deletion and retry behavior.
 No install link is returned for a provider that fails generation/creation.
 The `pass_updated` ingestion flag means at least one provider update succeeded;
 it does not prove delivery to a physical device.
@@ -132,8 +138,8 @@ The existing public logo endpoint serves the stored image for Google Wallet and
 the admin; Apple bundles include those same bytes. Legacy PNG paths relative to
 `ASSETS_DIR` (`/data/assets` in Docker) remain supported until replaced by an upload.
 Filesystem traversal is rejected. A brand-color icon is included by default.
-Merchant name, color, logo, points, customer QR, latest
-movements and outstanding coupons appear on the pass. Changing merchant branding
+Campaign name and balance, merchant name, color, logo, customer QR, campaign
+movements and outstanding customer coupons appear on the pass. Changing merchant branding
 refreshes its customer passes.
 
 ### Google
@@ -141,9 +147,9 @@ refreshes its customer passes.
 Required: Google Wallet issuer account, Wallet API enabled, and a service account
 with issuer access. Supply `GOOGLE_ISSUER_ID` and
 `GOOGLE_SA_JSON=/certs/google-sa.json`. The service creates one loyalty class per
-merchant, creates a loyalty object per customer, patches existing resources, and
+campaign, creates a loyalty object per assignment, patches existing resources, and
 returns a signed Save-to-Wallet JWT link valid for one hour. Regenerate expired
-links from Customers. Google review/publishing approval is still required for
+links from **Passes > URL and QR**. Legacy passes retain their original identifiers. Google review/publishing approval is still required for
 public distribution. Public merchant logo URLs are served by the API.
 
 Provider references:
@@ -252,3 +258,22 @@ healthy. HTTP checks verified admin routes, health, authenticated merchant listi
 and the deployed logo upload schema. The workspace was initialized as a Git
 repository for publication to `slganimedes/Loyalty-platform`; local environment,
 database, backup, certificates and generated artifacts are excluded.
+
+## Campaign passes validation (2026-09-20)
+
+52 backend tests and 3 Playwright browser workflows passed, including explicit
+assignment, installation URL/QR, campaign/customer deletion, provider revocation
+retries, signed voided Apple passes and preservation of legacy records during
+SQLite migration. Provider calls use test doubles; this does not assert delivery
+to a physical wallet device. Ruff checks and the production Vite build passed.
+
+`python scripts/check_deployment.py` successfully exercised the standalone Compose
+using standard images and an isolated archive of the unpublished working tree:
+source extraction, Python dependency installation, web compilation, healthchecks,
+SPA routing and login/logout through Nginx. It used synthetic credentials and
+removed only its own temporary Docker resources. GitHub publication was not performed.
+
+The local stack was rebuilt and both services became healthy. A verified SQLite
+backup was taken before the migration. Post-upgrade checks verified database
+integrity, foreign keys, unchanged existing record counts and HTTP access to the
+admin routes. No existing pass was revoked as part of deployment validation.

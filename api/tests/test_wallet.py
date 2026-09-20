@@ -18,9 +18,24 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
 from cryptography.x509.oid import NameOID
 from google.auth import crypt, jwt
-from test_e2e import SessionLocal, client, models, payment, shop
+from test_e2e import SessionLocal, client, models, payment
+from test_e2e import shop as base_shop
 
 from app.services import passes
+
+
+def shop():
+    """Seed explicit legacy assignments to retain coverage of already installed passes."""
+    mid, cid = base_shop()
+    with SessionLocal() as db:
+        customer = db.get(models.Customer, cid)
+        cfg = passes._wallet_config(db)
+        passes.ensure_pass(db, customer, "apple", passes.provider_config(cfg, "apple"))
+        config = passes.provider_config(cfg, "google")
+        config["issuer_id"] = "123"
+        passes.ensure_pass(db, customer, "google", config)
+        db.commit()
+    return mid, cid
 
 
 @pytest.fixture

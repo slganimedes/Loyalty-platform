@@ -21,6 +21,7 @@ export default function Layout() {
     ["/merchants", "nav_merchants"],
     ["/customers", "nav_customers"],
     ["/campaigns", "nav_campaigns"],
+    ["/passes", "passes"],
     ["/coupons", "nav_coupons"],
     ["/transactions", "transactions"],
     ...(user?.role === "super_admin" ? [["/wallet", "nav_wallet"]] : []),

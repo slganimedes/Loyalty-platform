@@ -1,0 +1,141 @@
+# Standalone deployment: this file + environment/certificates are sufficient.
+# Pin SOURCE_REF to a published Git commit. No local checkout or custom images.
+services:
+  source:
+    image: python:3.12-slim
+    restart: "no"
+    environment:
+      SOURCE_REF: ${SOURCE_REF:?Set SOURCE_REF to the full published Git commit}
+      SOURCE_URL: ${SOURCE_URL:-https://codeload.github.com/slganimedes/Loyalty-platform/tar.gz/${SOURCE_REF}}
+    volumes:
+      - source:/source
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import os, pathlib, re, shutil, tarfile, tempfile, urllib.request
+        ref = os.environ['SOURCE_REF']
+        if not re.fullmatch(r'[0-9a-f]{40}', ref):
+            raise SystemExit('SOURCE_REF must be a full Git commit SHA')
+        root = pathlib.Path('/source')
+        target = root / ref
+        if not (target / '.ready').exists():
+            with tempfile.TemporaryDirectory(dir=root) as scratch:
+                scratch = pathlib.Path(scratch)
+                archive = scratch / 'source.tar.gz'
+                with urllib.request.urlopen(os.environ['SOURCE_URL'], timeout=60) as response, archive.open('wb') as output:
+                    shutil.copyfileobj(response, output)
+                unpack = scratch / 'unpack'
+                unpack.mkdir()
+                with tarfile.open(archive) as bundle:
+                    bundle.extractall(unpack, filter='data')
+                entries = list(unpack.iterdir())
+                if len(entries) != 1 or not entries[0].is_dir():
+                    raise SystemExit('Expected a GitHub source archive')
+                repo = entries[0]
+                for required in ['api/requirements.txt', 'admin-web/package-lock.json', 'scripts/start_api.sh']:
+                    if not (repo / required).is_file():
+                        raise SystemExit('Commit lacks deployment files: ' + required)
+                (repo / '.ready').write_text(ref)
+                repo.rename(target)
+        print('Source ready at commit ' + ref)
+  web-build:
+    image: node:22-alpine
+    restart: "no"
+    environment:
+      SOURCE_REF: ${SOURCE_REF}
+    depends_on:
+      source:
+        condition: service_completed_successfully
+    volumes:
+      - source:/source:ro
+      - web:/web
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        work=$$(mktemp -d)
+        cp -R /source/$$SOURCE_REF/admin-web/. "$$work/"
+        cd "$$work"
+        npm ci --no-audit --no-fund
+        npm run build
+        mkdir -p /web/$$SOURCE_REF
+        cp -R dist/. /web/$$SOURCE_REF/
+  api:
+    image: python:3.12-slim
+    restart: unless-stopped
+    environment:
+      SOURCE_REF: ${SOURCE_REF}
+      DATABASE_URL: sqlite:////data/loyalty.db
+      ASSETS_DIR: /data/assets
+      PAN_HASH_SECRET: ${PAN_HASH_SECRET:?Set a persistent PAN_HASH_SECRET}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.slmartinez.org}
+      PUBLIC_ADMIN_URL: ${PUBLIC_ADMIN_URL:-https://admin.slmartinez.org}
+      GOOGLE_ISSUER_ID: ${GOOGLE_ISSUER_ID:-}
+      GOOGLE_SA_JSON: /certs/google-sa.json
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_PASS_TYPE_ID: ${APPLE_PASS_TYPE_ID:-pass.org.slmartinez.loyalty}
+      APPLE_CERT_PATH: /certs/pass.p12
+      APPLE_CERT_PASSWORD: ${APPLE_CERT_PASSWORD:-}
+      APPLE_WWDR_CERT_PATH: /certs/wwdr.pem
+      APPLE_WEBSERVICE_URL: ${APPLE_WEBSERVICE_URL:-https://api.slmartinez.org}
+      SESSION_HOURS: ${SESSION_HOURS:-12}
+    depends_on:
+      source:
+        condition: service_completed_successfully
+    volumes:
+      - source:/source:ro
+      - python-env:/python-env
+      - ${DATA_DIR:-./data}:/data
+      - ${CERTS_DIR:-./data/certs}:/certs:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ['exec /bin/sh /source/$$SOURCE_REF/scripts/start_api.sh']
+    expose: ["8000"]
+    ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+  admin-web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    environment:
+      SOURCE_REF: ${SOURCE_REF}
+    depends_on:
+      web-build:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    volumes:
+      - source:/source:ro
+      - web:/web:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        cp /source/$$SOURCE_REF/admin-web/nginx.conf /etc/nginx/conf.d/default.conf
+        sed -i "s|/usr/share/nginx/html|/web/$$SOURCE_REF|" /etc/nginx/conf.d/default.conf
+        exec nginx -g 'daemon off;'
+    ports: ["127.0.0.1:${ADMIN_PORT:-8080}:80"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --protocol http2 run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      api:
+        condition: service_healthy
+      admin-web:
+        condition: service_healthy
+volumes:
+  source:
+  web:
+  python-env:

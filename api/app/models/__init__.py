@@ -12,11 +12,13 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -92,6 +94,7 @@ class Customer(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     dni: Mapped[str | None] = mapped_column(String, nullable=True)
     points_balance: Mapped[int] = mapped_column(Integer, default=0)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     merchant = relationship("Merchant", back_populates="customers")
@@ -101,10 +104,20 @@ class Customer(Base):
 
 class Pass(Base):
     __tablename__ = "pass"
-    __table_args__ = (UniqueConstraint("customer_id", "platform", name="uq_customer_platform"),)
+    __table_args__ = (
+        Index(
+            "uq_active_campaign_pass",
+            "customer_id",
+            "campaign_id",
+            "platform",
+            unique=True,
+            sqlite_where=text("status = 'active' AND campaign_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customer.id"), nullable=False)
+    campaign_id: Mapped[str | None] = mapped_column(ForeignKey("campaign.id"), nullable=True)
     platform: Mapped[str] = mapped_column(String, nullable=False)  # apple / google
     external_pass_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="active")  # active / revoked
@@ -114,6 +127,7 @@ class Pass(Base):
     pass_type_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     customer = relationship("Customer", back_populates="passes")
+    campaign = relationship("Campaign")
 
 
 class Campaign(Base):
@@ -121,11 +135,13 @@ class Campaign(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     merchant_id: Mapped[str] = mapped_column(ForeignKey("merchant.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, default="Campaign", nullable=False)
     type: Mapped[str] = mapped_column(
         String, nullable=False
     )  # points_per_spend / interaction / coupon
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     merchant = relationship("Merchant", back_populates="campaigns")
 

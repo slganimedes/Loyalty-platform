@@ -65,6 +65,9 @@ Bootstrapping the MVP: project scaffolding → backend core (models + merchant/c
 → wallet integrations → ingestion → admin web → Docker → deploy on Unraid.
 
 ## Notes for the assistant
+- Never push or publish to GitHub unless the user explicitly requests it.
+- Campaign passes, deletion and installation URL/QR behavior: `docs/CAMPAIGN_PASSES.md`.
+- Standalone production Compose with standard images and GitHub source: `docs/COMPOSE_DEPLOYMENT.md`.
 - Ask before cross-file refactors or adding new dependencies.
 - Prefer small, verifiable steps; show the diff.
 - When unsure about business rules, check `docs/PRD.md` instead of guessing.

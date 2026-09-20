@@ -25,13 +25,13 @@ def apple_config(db: Session) -> dict:
 
 
 def authorized_pass(
-    db: Session, serial: str, token: str, pass_type: str | None = None
+    db: Session, serial: str, token: str, pass_type: str | None = None, allow_revoked: bool = False
 ) -> models.Pass:
     row = db.get(models.Pass, serial)
     if (
         not row
         or row.platform != "apple"
-        or row.status != "active"
+        or (row.status != "active" and not (allow_revoked and row.status == "revoked"))
         or (pass_type is not None and row.pass_type_id != pass_type)
     ):
         raise HTTPException(404, "Pass not found")
@@ -128,7 +128,7 @@ def unregister(
     db: Session = Depends(get_db),
 ) -> Response:
     apple_config(db)
-    row = authorized_pass(db, serial, apple_token(authorization), pass_type)
+    row = authorized_pass(db, serial, apple_token(authorization), pass_type, allow_revoked=True)
     db.query(models.DeviceRegistration).filter_by(device_id=device, pass_id=row.id).delete()
     db.commit()
     return Response(status_code=200)
@@ -148,7 +148,7 @@ def updates(
         .filter(
             models.DeviceRegistration.device_id == device,
             models.Pass.pass_type_id == pass_type,
-            models.Pass.status == "active",
+            models.Pass.status.in_(["active", "revoked"]),
         )
     )
     if passesUpdatedSince is not None:
@@ -172,7 +172,7 @@ def latest(
     db: Session = Depends(get_db),
 ) -> Response:
     config = apple_config(db)
-    row = authorized_pass(db, serial, apple_token(authorization), pass_type)
+    row = authorized_pass(db, serial, apple_token(authorization), pass_type, allow_revoked=True)
     return pass_response(db, row, config, if_modified_since, if_none_match)
 
 
