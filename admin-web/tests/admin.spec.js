@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createCampaign, fillDesign } from "./campaign-fixtures";
 
 test("real login, merchant/customer/campaign/coupon/payment, wallet toggles and ES/EN persistence", async ({ page }) => {
   const errors = [];
@@ -40,7 +41,11 @@ test("real login, merchant/customer/campaign/coupon/payment, wallet toggles and 
   await page.getByRole("button", {name: "Enroll", exact: true}).click();
   await expect(page.getByRole("row").filter({hasText: "BROWSER-C1"})).toBeVisible();
   await page.getByRole("link", {name: "Campaigns", exact: true}).click();
+  await page.getByRole("button", {name: "New campaign", exact: true}).click();
   await page.getByLabel("Name", {exact: true}).fill("Browser points campaign");
+  await fillDesign(page);
+  await page.getByLabel("BROWSER-C1", {exact: true}).check();
+  await page.getByLabel("I have reviewed", {exact: false}).check();
   await page.getByRole("button", {name: "Create", exact: true}).click();
   await expect(page.getByRole("cell", {name: "Points per spend", exact: true})).toBeVisible();
   await page.getByRole("link", {name: "Coupons", exact: true}).click();
@@ -98,7 +103,7 @@ test("payment clients follow the merchant and lost responses retry without doubl
   const first = await (await request.post("/api/v1/merchants", {headers, data: {name: "Retry shop"}})).json();
   const empty = await (await request.post("/api/v1/merchants", {headers, data: {name: "Empty shop"}})).json();
   await request.post(`/api/v1/merchants/${first.id}/customers`, {headers, data: {customer_code: "RETRY-C1"}});
-  await request.post(`/api/v1/merchants/${first.id}/campaigns`, {headers, data: {type: "points_per_spend", config: {points: 1, amount_unit: 10}}});
+  await createCampaign(request, first.id, headers, {type: "points_per_spend", config: {points: 1, amount_unit: 10}});
   await page.addInitScript(token => sessionStorage.setItem("token", token), token);
   await page.goto("/transactions");
   await page.getByLabel("Merchant", {exact: true}).selectOption(first.id);
@@ -139,7 +144,7 @@ test("campaign pass assignment shows URL and QR and supports parent deletions", 
   const customer = enrolled.customer;
   const campaigns = [];
   for (const name of ["Coffee rewards", "Lunch rewards"]) {
-    campaigns.push(await (await request.post(`/api/v1/merchants/${merchant.id}/campaigns`, {headers, data: {name, type: "points_per_spend", config: {points: 1, amount_unit: 10}}})).json());
+    campaigns.push(await createCampaign(request, merchant.id, headers, {name, type: "points_per_spend", config: {points: 1, amount_unit: 10}}));
   }
   await request.put("/api/v1/settings/wallet/google", {headers, data: {enabled: true, config: {issuer_id: "123", sa_json: "__missing_browser_test_credentials__"}}});
   // Keep real assignment persistence and authorization; substitute only provider delivery.
@@ -186,7 +191,7 @@ test("merchant deletion previews impact, cancels safely and confirms cascade", a
   await request.patch("/api/v1/users/me", {headers, data: {language: "en"}});
   const merchant = await (await request.post("/api/v1/merchants", {headers, data: {name: "Delete cascade shop"}})).json();
   await request.post(`/api/v1/merchants/${merchant.id}/customers`, {headers, data: {customer_code: "DELETE-C1"}});
-  await request.post(`/api/v1/merchants/${merchant.id}/campaigns`, {headers, data: {name: "Deletion campaign", type: "interaction", config: {interactions_required: 5, reward_description: "Free coffee"}}});
+  await createCampaign(request, merchant.id, headers, {name: "Deletion campaign", type: "interaction", config: {interactions_required: 5, reward_description: "Free coffee"}});
   await page.addInitScript(token => sessionStorage.setItem("token", token), token);
   await page.goto("/merchants");
   const row = page.getByRole("row").filter({hasText: "Delete cascade shop"});

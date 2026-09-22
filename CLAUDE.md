@@ -50,7 +50,7 @@ docker compose up --build            # api + admin-web (+ cloudflared in prod)
 - **Never store the PAN in clear** — only an irreversible hash. Never log full PAN.
 - **Never commit secrets** — `.env`, `.p12`, service-account JSON live only in Unraid `appdata`.
 - Pass web-service URLs must use the **public HTTPS domain** (`https://api.slmartinez.org`), never a local IP.
-- MVP decision: ingestion endpoint has **no auth** — protect it at the network layer (Cloudflare WAF/Access). Don't add auth without discussing.
+- Current user requirement: `AUTH_ENABLED=false` opens all endpoints and the admin for testing, including Apple callbacks. Preserve the optional `AUTH_ENABLED=true` mode for sessions and tenant authorization. See `docs/REDEPLOY_UNRAID.md`.
 - Points do not expire and there are no refunds/reversals in the MVP.
 
 ## Definition of done

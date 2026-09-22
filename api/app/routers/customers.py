@@ -22,6 +22,9 @@ def delete_customer(
         raise HTTPException(404, "Customer not found")
     authorize_merchant(customer.merchant_id, user, db)
     customer.deleted = True
+    from ..services.campaigns import cancel_enrollments
+
+    cancel_enrollments(db, customer_id=customer.id)
     rows = db.query(models.Pass).filter_by(customer_id=customer_id).all()
     passes.mark_revoked(db, rows)
     db.commit()

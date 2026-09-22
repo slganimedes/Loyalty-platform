@@ -21,7 +21,9 @@ continuing. Do not ask me to confirm between phases unless a decision truly bloc
 5. Wire `.env`, confirm `docker compose up -d --build` runs the full stack.
 6. Update `docs/DEPLOYMENT_README.md` if anything changed.
 
-**Constraints:** never store PAN in clear; never commit secrets; ingestion stays unauthenticated
-in the pilot (network-protected). Keep Phase 2 items (cross-merchant, BI) OUT of scope.
+**Constraints:** never store PAN in clear; never commit secrets; the user's test configuration opens
+all endpoints with `AUTH_ENABLED=false`. `true` restores Bearer/ApplePass protection.
+See `CAMPAIGN_DESIGNS.md` for the explicit enrollment and design model, and `REDEPLOY_UNRAID.md` for redeployment.
+Keep Phase 2 items (cross-merchant, BI) OUT of scope.
 
 Start by running the tests and reporting what passes/fails.

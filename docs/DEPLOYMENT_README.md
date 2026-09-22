@@ -160,10 +160,14 @@ Provider references:
 
 ## Loyalty rules and ingestion
 
-`POST /api/v1/transactions` remains unauthenticated for the pilot. Restrict it at
-the network layer on **both** public hostnames: the admin proxy also exposes
-`/api/v1/transactions`. Do not place Cloudflare interactive authentication in
-front of Apple callbacks, pass install links or Google logo URLs.
+The requested test configuration sets `AUTH_ENABLED=false`: every endpoint and the
+admin are accessible without credentials, including payments, Wallet settings and
+Apple callbacks. `AUTH_ENABLED=true` restores sessions and merchant authorization;
+in that mode external connectors authenticate and renew expired sessions. Do not place Cloudflare interactive
+authentication in front of Apple callbacks, pass install links or public pass assets.
+See [campaign designs and migration](CAMPAIGN_DESIGNS.md) for the updated model,
+new upload limits, persistent storage, automatic pre-migration backup and rollback.
+Follow [the Unraid redeployment steps](REDEPLOY_UNRAID.md) to install the published version.
 
 - Identifiers are scoped to a merchant, with priority card hash, customer code,
   email, DNI. Enrollment and ingestion both accept only a lowercase 64-character

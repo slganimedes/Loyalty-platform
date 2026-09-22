@@ -10,6 +10,7 @@ function PassManager({ merchantId, initialCustomer }) {
   const [rows, setRows] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [memberIds, setMemberIds] = useState([]);
   const [campaignId, setCampaignId] = useState("");
   const [customerId, setCustomerId] = useState(initialCustomer || "");
   const [platform, setPlatform] = useState("google");
@@ -31,6 +32,16 @@ function PassManager({ merchantId, initialCustomer }) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [merchantId, initialCustomer]);
+  useEffect(() => {
+    let alive = true;
+    setMemberIds([]); setCustomerId("");
+    if (campaignId) api.campaignCustomers(campaignId).then(rows => {
+      if (!alive) return;
+      const ids = rows.filter(r => r.status === "active").map(r => r.customer_id);
+      setMemberIds(ids); if (ids.includes(initialCustomer)) setCustomerId(initialCustomer);
+    }).catch(e => { if (alive) setErr(e.message); });
+    return () => {alive = false;};
+  }, [campaignId, initialCustomer]);
   const display = async (result) => {
     if (!result.url) { setErr(t("passIssueFailed")); return; }
     const qr = await QRCode.toDataURL(result.url, { width: 440, margin: 4, errorCorrectionLevel: "M" });
@@ -66,7 +77,7 @@ function PassManager({ merchantId, initialCustomer }) {
         </select></label>
         <label>{t("customer")}<select aria-label={t("customer")} required disabled={busy || loading} value={customerId} onChange={e => setCustomerId(e.target.value)}>
           <option value="">{t("selectCustomer")}</option>
-          {customers.map(c => <option key={c.id} value={c.id}>{c.customer_code}{c.email ? ` · ${c.email}` : ""}</option>)}
+          {customers.filter(c => memberIds.includes(c.id)).map(c => <option key={c.id} value={c.id}>{c.name || c.customer_code}</option>)}
         </select></label>
         <label>{t("provider")}<select aria-label={t("provider")} disabled={busy} value={platform} onChange={e => setPlatform(e.target.value)}><option value="google">Google Wallet</option><option value="apple">Apple Wallet</option></select></label>
       </div>

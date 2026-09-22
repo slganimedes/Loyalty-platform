@@ -19,7 +19,7 @@ to customers, then accrue rewards per transaction and update the assigned passes
 - **Super Admin** (bank): all merchants + wallet config.
 - **SME Admin** (merchant): own merchant only.
 - **End customer**: interacts only via the wallet pass (no login).
-Admin auth: username + password.
+Admin auth is optional: disabled in the requested public test mode; username + password when `AUTH_ENABLED=true`.
 
 ## 4. Key decisions (locked)
 1. Customers unique per merchant.
@@ -28,10 +28,10 @@ Admin auth: username + password.
 4. PAN never stored in clear — irreversible hash only.
 5. Points don't expire; no refunds/reversals in MVP.
 6. Real-time pass update on every change.
-7. Ingestion endpoint has NO auth in the pilot (protect at network layer).
+7. All API endpoints are open in the default test mode; `AUTH_ENABLED=true` restores the protected deployment behavior.
 8. SQLite + docker-compose.
 9. Wallet config in admin web with independent Apple/Google toggles.
-10. Admin web bilingual ES/EN, persisted per user, default ES.
+10. Admin web bilingual ES/EN, persisted per user (per browser in public mode), default ES.
 
 ## 5. Loyalty engine — 3 campaign types
 - **points_per_spend**: `{points, amount_unit, rounding}` (e.g. 1 pt / 10 €).
@@ -39,6 +39,7 @@ Admin auth: username + password.
 - **coupon**: `{amount}` issued to a customer; auto-redeemed at payment/QR.
 
 ## 6. Transaction ingestion (POST /transactions)
+- All endpoints, including ingestion, are open in test mode (`AUTH_ENABLED=false`). Optional `true` restores authentication and merchant authorization.
 - Same contract for Getnet / ecommerce / other.
 - Idempotent by `external_transaction_id`.
 - Matching priority: card_hash → customer_number → email → dni (scoped to merchant).
@@ -48,16 +49,23 @@ Admin auth: username + password.
 ## 7. Passes
 Passes belong to campaigns and are explicitly assigned to customers of the same merchant.
 One active pass per customer/campaign/provider; enrollment never creates passes automatically.
-Admin shows the installation URL and its QR. The QR inside a pass identifies the customer.
+Admin shows the installation URL and its QR. The QR inside a campaign pass identifies its enrollment using an opaque token.
 Content: campaign name and balance, merchant name, campaign movements, customer code, QR.
 Customers/campaigns can be soft-deleted and passes revoked; Google receives INACTIVE,
 Apple receives a voided pass and APNs notification. Failed revocations retry durably.
 Existing passes without a campaign remain labelled legacy; no automatic reassignment.
 See [campaign pass behavior](CAMPAIGN_PASSES.md) for endpoints and retention semantics.
-Per-merchant branding: color, name, logo. Real-time update (Apple APNs + web service; Google API patch).
+Campaign creation includes logo/hero uploads, image descriptions, background color,
+subheader, points/customer-since labels, QR alternate text and locale, with preview.
+`cardTitle` comes from Merchant, `header` from Customer, and points from the campaign ledger.
+Customer joining date is stored in the existing `customer.created_at`, optionally supplied
+as `joined_on` during registration. The pass shows three month letters and year:
+`ene 2020`, `sep 2026` (`Jan 2020`, `Sep 2026` in English). Enrollment timestamps remain separate.
+Real-time update (Apple APNs + web service; Google API patch).
 
 ## 8. Data model (SQLite)
-merchant, admin_user, wallet_config, customer, pass, campaign, coupon, transaction, movement.
+merchant, admin_user, wallet_config, customer, pass, campaign, coupon, transaction, movement,
+campaign_enrollment, pass_design, pass_asset, schema_migration.
 See `api/app/models/__init__.py` for the authoritative schema.
 
 ## 9. API (base /api/v1)
@@ -71,7 +79,7 @@ See `api/app/models/__init__.py` for the authoritative schema.
 
 ## 10. Security posture (MVP)
 - PAN hash only (HMAC-SHA256 keyed by PAN_HASH_SECRET) — validate with bank before prod.
-- Ingestion endpoint unauthenticated → restrict via Cloudflare WAF/Access.
+- Public test mode (`AUTH_ENABLED=false`) disables authentication across the API, panel and Apple callbacks. Anyone reaching the URL has administrative access. `true` restores Bearer/ApplePass authentication and tenant authorization.
 - Admin passwords hashed (bcrypt/argon2). TLS everywhere (Cloudflare edge).
 - Pre-production: add API-key/mTLS to ingestion; full GDPR; audit logging.
 
@@ -81,7 +89,7 @@ Unraid (Docker Compose Manager) + Cloudflare Tunnel. Public hostnames:
 Pass web-service URLs must use the public HTTPS domain, never a local IP.
 Use standalone `docker-compose.deploy.yml` with standard Python/Node/Nginx images;
 source is downloaded from a pinned GitHub commit. No custom application images required.
-See [Compose deployment](COMPOSE_DEPLOYMENT.md), `Unraid_Cloudflare.md` and `DEPLOYMENT_README.md`.
+See [Unraid redeployment](REDEPLOY_UNRAID.md), [Compose deployment](COMPOSE_DEPLOYMENT.md), `Unraid_Cloudflare.md` and `DEPLOYMENT_README.md`.
 Do not publish to GitHub without an explicit user request.
 
 

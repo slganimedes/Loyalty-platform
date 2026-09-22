@@ -29,8 +29,10 @@ connection to Cloudflare. Result: zero inbound ports, IP never exposed, valid HT
 Works even behind CGNAT.
 
 ## Protect the ingestion endpoint (pilot)
-`POST /api/v1/transactions` has no auth. Add a **Cloudflare WAF** rule allowing only Getnet IPs
-(when known), and/or **Cloudflare Access** on `admin.slmartinez.org`.
+`AUTH_ENABLED=false` opens all endpoints for testing; no token is required, including
+payments and Wallet administration. Set it to `true` to restore sessions and tenant
+authorization. Cloudflare rules may add network restrictions,
+but public pass images under `/api/v1/public/pass-assets/` must remain readable by Google.
 
 ## Verify
 From **outside your network** (mobile data): `https://api.slmartinez.org/docs` must load.

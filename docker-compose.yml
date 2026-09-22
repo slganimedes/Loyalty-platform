@@ -6,6 +6,9 @@ services:
     environment:
       DATABASE_URL: sqlite:////data/loyalty.db
       ASSETS_DIR: /data/assets
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      PASS_ASSET_MAX_BYTES: ${PASS_ASSET_MAX_BYTES:-4194304}
+      PASS_ASSET_MAX_PIXELS: ${PASS_ASSET_MAX_PIXELS:-16777216}
     volumes:
       - ./data:/data
       - ./data/certs:/certs:ro

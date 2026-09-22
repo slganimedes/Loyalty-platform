@@ -6,7 +6,10 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+from campaign_fixtures import create_campaign
+from cryptography.hazmat.primitives import serialization
 from fastapi.testclient import TestClient
+from google.auth import crypt, jwt
 from sqlalchemy import create_engine, text
 from test_e2e import SessionLocal, client, models, payment, shop
 from test_wallet import wallet_config as wallet_fixture
@@ -20,7 +23,8 @@ wallet_config = wallet_fixture
 
 
 def campaign(mid, name="Campaign A"):
-    return client.post(
+    return create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={
             "name": name,
@@ -63,6 +67,66 @@ def assign(cid, camp, provider="google"):
     return client.post(
         f"/api/v1/customers/{cid}/passes", json={"campaign_id": camp, "platform": provider}
     )
+
+
+def test_generic_provider_contract_updates_and_revokes_with_stable_object(
+    wallet_config, monkeypatch
+):
+    _, key, cert = wallet_config
+    pem = key.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )
+    creds = SimpleNamespace(
+        token="fake",
+        refresh=Mock(),
+        signer=crypt.RSASigner.from_string(pem),
+        service_account_email="fixture@example.iam.gserviceaccount.com",
+    )
+    monkeypatch.setattr(passes, "_google_credentials", lambda config: creds)
+    calls, created = [], set()
+
+    def handler(request):
+        calls.append(request)
+        if request.method == "POST":
+            identity = json.loads(request.content)["id"]
+            if identity in created:
+                return httpx.Response(409)
+            created.add(identity)
+        return httpx.Response(200, json={})
+
+    original = httpx.Client
+    monkeypatch.setattr(
+        passes.httpx, "Client", lambda **kw: original(transport=httpx.MockTransport(handler), **kw)
+    )
+    with SessionLocal() as db:
+        cfg = passes._wallet_config(db)
+        cfg.apple_enabled, cfg.google_enabled = False, True
+        cfg.google_config = {"issuer_id": "123", "sa_json": "unused"}
+        db.commit()
+    mid, cid = shop()
+    camp = campaign(mid)
+    first = assign(cid, camp).json()
+    assert first["provider_synced"]
+    token = first["url"].rsplit("/", 1)[-1]
+    claims = jwt.decode(
+        token, certs=cert.public_bytes(serialization.Encoding.PEM), audience="google"
+    )
+    with SessionLocal() as db:
+        external_id = db.get(models.Pass, first["pass"]["id"]).external_pass_id
+    assert claims["payload"]["genericObjects"][0]["id"] == external_id
+    assert any(r.url.path.endswith("/genericClass") for r in calls)
+    assert any(r.url.path.endswith("/genericObject") for r in calls)
+    payment(mid)
+    patches = [
+        json.loads(r.content)
+        for r in calls
+        if r.method == "PATCH" and "/genericObject/" in r.url.path
+    ]
+    assert patches[-1]["textModulesData"][0]["body"] == "2"
+    assert patches[-1]["header"]["defaultValue"]["value"] == "C"
+    assert client.post(f"/api/v1/campaigns/{camp}/archive").json()["pending_revocations"] == 0
+    assert json.loads(calls[-1].content)["state"] == "INACTIVE"
+    assert "/genericObject/" in calls[-1].url.path
 
 
 def test_explicit_multiple_campaign_assignments_and_no_auto_creation(google_provider):
@@ -123,17 +187,17 @@ def test_deleted_customer_no_longer_matches_and_pending_revocation_retries(googl
     assert len(google_provider[1]) == calls
 
 
-def test_reassign_after_deletion_uses_new_external_object(google_provider):
+def test_reassign_after_deletion_keeps_enrollment_object_id(google_provider):
     mid, cid = shop()
     camp = campaign(mid)
     first = assign(cid, camp).json()["pass"]
     client.delete(f"/api/v1/customers/{cid}/passes/{first['id']}")
     second = assign(cid, camp).json()["pass"]
-    assert second["id"] != first["id"]
+    assert second["id"] == first["id"]
     with SessionLocal() as db:
         assert (
             db.get(models.Pass, first["id"]).external_pass_id
-            != db.get(models.Pass, second["id"]).external_pass_id
+            == db.get(models.Pass, second["id"]).external_pass_id
         )
 
 
@@ -299,7 +363,7 @@ def test_merchant_deletion_summary_cascade_and_retries(google_provider):
         ).status_code
         == 401
     )
-    assert payment(mid).status_code == 409
+    assert payment(mid).status_code == 404
     assert client.get(f"/api/v1/merchants/{other_mid}/customers").json()[0]["id"] == other_cid
     with SessionLocal() as db:
         assert db.get(models.Customer, cid).deleted

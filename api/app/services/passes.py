@@ -116,11 +116,40 @@ def ensure_pass(
         )
         .first()
     )
+    membership = (
+        db.query(models.CampaignEnrollment)
+        .filter_by(customer_id=customer.id, campaign_id=campaign_id)
+        .first()
+        if campaign_id
+        else None
+    )
+    campaign = db.get(models.Campaign, campaign_id) if campaign_id else None
+    generic = (
+        platform == "google"
+        and campaign
+        and campaign.type == "points_per_spend"
+        and campaign.lifecycle == "ready"
+    )
+    if not row and generic and membership:
+        row = (
+            db.query(models.Pass)
+            .filter_by(enrollment_id=membership.id, platform="google", google_kind="generic")
+            .first()
+        )
+        if row:
+            if row.updated_tag != row.synced_tag:
+                raise ValueError(
+                    "Wait for the previous revocation before reissuing this enrollment"
+                )
+            row.status = "active"
+            row.updated_tag = _next_tag(db)
     if not row:
         row = models.Pass(
             customer_id=customer.id,
             campaign_id=campaign_id,
             platform=platform,
+            enrollment_id=membership.id if membership else None,
+            google_kind="generic" if generic else "loyalty",
             auth_token=secrets.token_urlsafe(32),
             updated_tag=_next_tag(db),
             synced_tag=0,
@@ -136,7 +165,12 @@ def ensure_pass(
         row.external_pass_id = row.id
     else:
         suffix = row.id if row.campaign_id else customer.id
-        external_id = f"{config['issuer_id']}.{suffix.replace('-', '')}"
+        if row.google_kind == "generic":
+            from .points_pass import identifiers
+
+            external_id = identifiers(config["issuer_id"], campaign_id, membership.id)[1]
+        else:
+            external_id = f"{config['issuer_id']}.{suffix.replace('-', '')}"
         if row.external_pass_id and row.external_pass_id != external_id:
             raise ValueError("Existing passes require the original issuer ID")
         row.external_pass_id = external_id
@@ -211,11 +245,15 @@ def _png(color: str, size: int) -> bytes:
 
 
 def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, config: dict) -> bytes:
+    from .points_pass import format_customer_since
+
     base = public_https_url(config["webservice_url"])
     if not config["team_id"] or not config["pass_type_id"]:
         raise ValueError("Apple Team ID and Pass Type ID are required")
     merchant = customer.merchant
-    rgb = tuple(bytes.fromhex(merchant.pass_color.lstrip("#")))
+    design = row.campaign.design if row.campaign else None
+    color = design.background_color if design else merchant.pass_color
+    rgb = tuple(bytes.fromhex(color.lstrip("#")))
     payload = {
         "formatVersion": 1,
         "voided": row.status == "revoked",
@@ -233,7 +271,9 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
         "barcodes": [
             {
                 "format": "PKBarcodeFormatQR",
-                "message": customer.customer_code,
+                "message": row.enrollment.barcode_token
+                if row.enrollment
+                else customer.customer_code,
                 "messageEncoding": "utf-8",
             }
         ],
@@ -248,7 +288,19 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
                 }
             ],
             "secondaryFields": [
-                {"key": "customer", "label": "Customer / Cliente", "value": customer.customer_code}
+                {
+                    "key": "customer",
+                    "label": "Customer / Cliente",
+                    "value": customer.name or customer.customer_code,
+                },
+                {
+                    "key": "customer_since",
+                    "label": (design.member_since_label if design else None)
+                    or "Cliente desde / Member since",
+                    "value": format_customer_since(
+                        customer.created_at, design.locale if design else "es-ES"
+                    ),
+                },
             ],
             "backFields": [
                 {
@@ -265,7 +317,11 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
         "icon.png": _png(merchant.pass_color, 29),
         "icon@2x.png": _png(merchant.pass_color, 58),
     }
-    if merchant.logo_data:
+    if design and design.hero_asset_id:
+        files["strip.png"] = db.get(models.PassAsset, design.hero_asset_id).content
+    if design and design.logo_asset_id:
+        files["logo.png"] = db.get(models.PassAsset, design.logo_asset_id).content
+    elif merchant.logo_data:
         files["logo.png"] = merchant.logo_data
     elif merchant.pass_logo_path:
         root = Path(settings.assets_dir).resolve()
@@ -362,6 +418,12 @@ def _google_credentials(config: dict):
 
 
 def google_sync(db: Session, customer: models.Customer, row: models.Pass, config: dict) -> str:
+    from .points_pass import format_customer_since
+
+    if row.external_pass_id and not row.external_pass_id.startswith(config["issuer_id"] + "."):
+        raise ValueError(
+            "Existing passes require the original issuer ID; revoke and reassign the failed pass"
+        )
     credentials = _google_credentials(config)
     credentials.refresh(Request())
     merchant = customer.merchant
@@ -382,20 +444,47 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
         "reviewStatus": "UNDER_REVIEW",
         "hexBackgroundColor": merchant.pass_color,
     }
+    design = row.campaign.design if row.campaign else None
+    if design:
+        from .pass_assets import public_url
+
+        class_body["hexBackgroundColor"] = design.background_color
+        for asset_id, key, description in (
+            (design.logo_asset_id, "programLogo", design.logo_description),
+            (design.hero_asset_id, "heroImage", design.hero_description),
+        ):
+            if asset_id:
+                class_body[key] = {
+                    "sourceUri": {"uri": public_url(asset_id)},
+                    "contentDescription": {
+                        "defaultValue": {"language": design.locale, "value": description}
+                    },
+                }
     obj = {
         "id": row.external_pass_id,
         "classId": class_id,
         "state": "ACTIVE",
         "accountId": customer.customer_code,
-        "accountName": customer.customer_code,
+        "accountName": customer.name or customer.customer_code,
         "loyaltyPoints": {
             "label": "Stamps / Sellos"
             if row.campaign and row.campaign.type == "interaction"
             else "Points / Puntos",
             "balance": {"int": campaign_balance(db, customer, row)},
         },
-        "barcode": {"type": "QR_CODE", "value": customer.customer_code},
+        "barcode": {
+            "type": "QR_CODE",
+            "value": row.enrollment.barcode_token if row.enrollment else customer.customer_code,
+        },
         "textModulesData": [
+            {
+                "id": "cliente_desde",
+                "header": (design.member_since_label if design else None)
+                or "Cliente desde / Member since",
+                "body": format_customer_since(
+                    customer.created_at, design.locale if design else "es-ES"
+                ),
+            },
             {
                 "id": "movements",
                 "header": "Movements / Movimientos",
@@ -404,20 +493,43 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
             {"id": "coupons", "header": "Coupons / Cupones", "body": _coupons(db, customer)},
         ],
     }
+    generic = row.google_kind == "generic"
+    if generic:
+        from .points_pass import build_points_pass
+
+        obj = build_points_pass(
+            db,
+            merchant,
+            row.campaign,
+            customer,
+            row.enrollment,
+            row.campaign.design,
+            config["issuer_id"],
+        )
+        if obj["id"] != row.external_pass_id:
+            raise ValueError(
+                "Existing passes require the original issuer ID; revoke before changing issuer"
+            )
+        class_id = obj["classId"]
+        class_body = {"id": class_id}
+    resource = "generic" if generic else "loyalty"
     with httpx.Client(
         timeout=15, headers={"Authorization": f"Bearer {credentials.token}"}
     ) as client:
-        response = client.post(f"{GOOGLE_BASE}/loyaltyClass", json=class_body)
+        response = client.post(f"{GOOGLE_BASE}/{resource}Class", json=class_body)
         if response.status_code == 409:
             # Google requires UNDER_REVIEW even when patching an approved class.
             patch = {key: value for key, value in class_body.items() if key != "id"}
-            client.patch(f"{GOOGLE_BASE}/loyaltyClass/{class_id}", json=patch).raise_for_status()
+            if patch:
+                client.patch(
+                    f"{GOOGLE_BASE}/{resource}Class/{class_id}", json=patch
+                ).raise_for_status()
         else:
             response.raise_for_status()
-        response = client.post(f"{GOOGLE_BASE}/loyaltyObject", json=obj)
+        response = client.post(f"{GOOGLE_BASE}/{resource}Object", json=obj)
         if response.status_code == 409:
             client.patch(
-                f"{GOOGLE_BASE}/loyaltyObject/{row.external_pass_id}", json=obj
+                f"{GOOGLE_BASE}/{row.google_kind}Object/{row.external_pass_id}", json=obj
             ).raise_for_status()
         else:
             response.raise_for_status()
@@ -430,7 +542,7 @@ def google_sync(db: Session, customer: models.Customer, row: models.Pass, config
             "iat": int(time.time()),
             "exp": int(time.time()) + 3600,
             "origins": [public_https_url(settings.public_admin_url)],
-            "payload": {"loyaltyObjects": [{"id": row.external_pass_id}]},
+            "payload": {resource + "Objects": [{"id": row.external_pass_id}]},
         },
     )
     return "https://pay.google.com/gp/v/save/" + token.decode()
@@ -447,7 +559,11 @@ def issue_pass_links(db: Session, customer: models.Customer, pass_id: str | None
             continue
         provider = row.platform
         link_key = row.id if row.campaign_id else provider
-        if customer.deleted or (row.campaign and row.campaign.deleted):
+        if (
+            customer.deleted
+            or (row.campaign and (row.campaign.deleted or not row.campaign.active))
+            or (row.enrollment and row.enrollment.status != "active")
+        ):
             continue
         if not getattr(cfg, f"{provider}_enabled"):
             continue
@@ -501,7 +617,7 @@ def revoke_pass(db: Session, customer: models.Customer, pass_id: str) -> bool:
                     timeout=15, headers={"Authorization": f"Bearer {credentials.token}"}
                 ) as client:
                     response = client.patch(
-                        f"{GOOGLE_BASE}/loyaltyObject/{row.external_pass_id}",
+                        f"{GOOGLE_BASE}/{row.google_kind}Object/{row.external_pass_id}",
                         json={"state": "INACTIVE"},
                     )
                     if response.status_code != 404:
@@ -533,7 +649,11 @@ def update_customer_pass(db: Session, customer: models.Customer) -> bool:
     updated = False
     for row in db.query(models.Pass).filter_by(customer_id=customer.id, status="active").all():
         provider = row.platform
-        if customer.deleted or (row.campaign and row.campaign.deleted):
+        if (
+            customer.deleted
+            or (row.campaign and (row.campaign.deleted or not row.campaign.active))
+            or (row.enrollment and row.enrollment.status != "active")
+        ):
             continue
         if not getattr(cfg, f"{provider}_enabled"):
             continue
@@ -586,3 +706,26 @@ def retry_pending_revocations() -> None:
             row = db.get(models.Pass, pass_id)
             if row:
                 revoke_pass(db, row.customer, row.id)
+
+
+def maintenance() -> None:
+    from ..db import SessionLocal
+    from .pass_assets import cleanup_assets
+
+    retry_pending_revocations()
+    with SessionLocal() as db:
+        customer_ids = {
+            r.customer_id
+            for r in db.query(models.Pass)
+            .filter(
+                models.Pass.status == "active", models.Pass.updated_tag != models.Pass.synced_tag
+            )
+            .all()
+        }
+    for customer_id in customer_ids:
+        with SessionLocal() as db:
+            customer = db.get(models.Customer, customer_id)
+            if customer and not customer.deleted:
+                update_customer_pass(db, customer)
+    with SessionLocal() as db:
+        cleanup_assets(db)

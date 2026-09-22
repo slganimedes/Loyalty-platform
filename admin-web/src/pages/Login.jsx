@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 
 export default function Login() {
-  const { t, lang, changeLang, login } = useApp();
+  const { t, lang, changeLang, login, user } = useApp();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +18,7 @@ export default function Login() {
     finally { setBusy(false); }
   };
 
+  if (user?.public_access) return <Navigate to="/merchants" replace />;
   return (
     <div className="login-wrap">
       <form className="login-box" onSubmit={submit}>

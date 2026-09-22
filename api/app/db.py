@@ -35,17 +35,32 @@ def get_db() -> Iterator[Session]:
 def init_db() -> None:
     """Create all tables. Imports models so they register on Base.metadata."""
     from . import models  # noqa: F401  (ensures models are imported)
+    from .migrations.backup import backup_before_migration
 
+    backup_before_migration(engine)
     Base.metadata.create_all(bind=engine)
     # Additive migrations preserve pilot data created by the original scaffold.
     additions = {
+        "pass_design": {
+            "points_label": "VARCHAR",
+            "member_since_label": "VARCHAR",
+            "barcode_alternate_text": "VARCHAR",
+        },
         "campaign": {
+            "description": "VARCHAR NOT NULL DEFAULT ''",
+            "lifecycle": "VARCHAR NOT NULL DEFAULT 'legacy'",
             "deleted": "BOOLEAN NOT NULL DEFAULT 0",
             "name": "VARCHAR NOT NULL DEFAULT 'Campaign'",
         },
-        "customer": {"deleted": "BOOLEAN NOT NULL DEFAULT 0"},
+        "customer": {
+            "deleted": "BOOLEAN NOT NULL DEFAULT 0",
+            "name": "VARCHAR",
+            "legacy_points_balance": "INTEGER NOT NULL DEFAULT 0",
+        },
         "merchant": {"logo_data": "BLOB"},
         "pass": {
+            "google_kind": "VARCHAR NOT NULL DEFAULT 'loyalty'",
+            "enrollment_id": "VARCHAR REFERENCES campaign_enrollment(id)",
             "campaign_id": "VARCHAR REFERENCES campaign(id)",
             "auth_token": "VARCHAR",
             "updated_tag": "INTEGER DEFAULT 0",
@@ -63,6 +78,9 @@ def init_db() -> None:
                         text(f'ALTER TABLE "{table}" ADD COLUMN {column} {definition}')
                     )
     _migrate_campaign_passes()
+    from .migrations.campaign_designs import migrate
+
+    migrate(engine)
 
 
 def _migrate_campaign_passes() -> None:
@@ -83,9 +101,10 @@ def _migrate_campaign_passes() -> None:
             customer_id VARCHAR NOT NULL REFERENCES customer(id),
             campaign_id VARCHAR REFERENCES campaign(id),
             platform VARCHAR NOT NULL, external_pass_id VARCHAR, status VARCHAR,
-            auth_token VARCHAR, updated_tag INTEGER, synced_tag INTEGER, pass_type_id VARCHAR
+            auth_token VARCHAR, updated_tag INTEGER, synced_tag INTEGER, pass_type_id VARCHAR,
+            google_kind VARCHAR NOT NULL DEFAULT 'loyalty', enrollment_id VARCHAR REFERENCES campaign_enrollment(id)
         )""")
-        columns = "id, customer_id, campaign_id, platform, external_pass_id, status, auth_token, updated_tag, synced_tag, pass_type_id"
+        columns = "id, customer_id, campaign_id, platform, external_pass_id, status, auth_token, updated_tag, synced_tag, pass_type_id, google_kind, enrollment_id"
         cursor.execute(
             f'INSERT INTO pass_campaign_migration ({columns}) SELECT {columns} FROM "pass"'
         )

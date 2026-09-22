@@ -35,7 +35,9 @@ def authorized_pass(
         or (pass_type is not None and row.pass_type_id != pass_type)
     ):
         raise HTTPException(404, "Pass not found")
-    if not token or not row.auth_token or not hmac.compare_digest(row.auth_token, token):
+    if settings.auth_enabled and (
+        not token or not row.auth_token or not hmac.compare_digest(row.auth_token, token)
+    ):
         raise HTTPException(401, "Invalid pass token")
     return row
 

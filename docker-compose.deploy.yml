@@ -77,6 +77,7 @@ services:
       SOURCE_REF: ${SOURCE_REF}
       DATABASE_URL: sqlite:////data/loyalty.db
       ASSETS_DIR: /data/assets
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
       PAN_HASH_SECRET: ${PAN_HASH_SECRET:?Set a persistent PAN_HASH_SECRET}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
@@ -91,6 +92,8 @@ services:
       APPLE_WWDR_CERT_PATH: /certs/wwdr.pem
       APPLE_WEBSERVICE_URL: ${APPLE_WEBSERVICE_URL:-https://api.slmartinez.org}
       SESSION_HOURS: ${SESSION_HOURS:-12}
+      PASS_ASSET_MAX_BYTES: ${PASS_ASSET_MAX_BYTES:-4194304}
+      PASS_ASSET_MAX_PIXELS: ${PASS_ASSET_MAX_PIXELS:-16777216}
     depends_on:
       source:
         condition: service_completed_successfully

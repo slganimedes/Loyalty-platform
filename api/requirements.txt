@@ -9,3 +9,4 @@ httpx[http2]==0.28.1
 cryptography>=44,<47
 google-auth>=2.38,<3
 requests>=2.32.4,<3
+Pillow>=12.1,<13

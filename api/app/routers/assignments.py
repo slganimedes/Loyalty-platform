@@ -57,12 +57,22 @@ def assign(db: Session, customer: models.Customer, body: PassAssignment) -> mode
         raise HTTPException(404, "Campaign not found in customer's merchant")
     if not campaign.active or customer.merchant.status != "active":
         raise HTTPException(409, "Campaign or merchant inactive")
+    membership = (
+        db.query(models.CampaignEnrollment)
+        .filter_by(campaign_id=campaign.id, customer_id=customer.id)
+        .first()
+    )
+    if not membership or membership.status != "active":
+        raise HTTPException(409, "An active campaign enrollment is required")
     cfg = passes._wallet_config(db)
     if not cfg or not getattr(cfg, f"{body.platform}_enabled"):
         raise HTTPException(409, "Wallet provider disabled")
-    row = passes.ensure_pass(
-        db, customer, body.platform, passes.provider_config(cfg, body.platform), campaign.id
-    )
+    try:
+        row = passes.ensure_pass(
+            db, customer, body.platform, passes.provider_config(cfg, body.platform), campaign.id
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
     db.commit()
     return row
 

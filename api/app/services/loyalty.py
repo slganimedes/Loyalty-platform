@@ -72,7 +72,16 @@ def apply_campaigns(
     total = 0
     campaigns = (
         db.query(models.Campaign)
-        .filter_by(merchant_id=merchant_id, active=True, deleted=False)
+        .join(
+            models.CampaignEnrollment, models.CampaignEnrollment.campaign_id == models.Campaign.id
+        )
+        .filter(
+            models.Campaign.merchant_id == merchant_id,
+            models.Campaign.active.is_(True),
+            models.Campaign.deleted.is_(False),
+            models.CampaignEnrollment.customer_id == customer.id,
+            models.CampaignEnrollment.status == "active",
+        )  # noqa: E712
         .all()
     )
     for campaign in campaigns:

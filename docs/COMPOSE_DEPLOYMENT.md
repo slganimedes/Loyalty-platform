@@ -81,6 +81,19 @@ Los puertos de Compose se publican únicamente en loopback.
 
 ## Actualizar y restaurar
 
+Para campañas con diseño e inscripciones, consultar [la migración y rollback](CAMPAIGN_DESIGNS.md).
+`PASS_ASSET_MAX_BYTES=4194304` y `PASS_ASSET_MAX_PIXELS=16777216` se exponen en todos
+los Compose y en `x-installation`. Las imágenes residen en SQLite bajo el volumen
+persistente `/data`; los backups automáticos previos están en `/data/backups`.
+`PUBLIC_API_URL` debe ser HTTPS y permitir lectura anónima de `/api/v1/public/pass-assets/`.
+`AUTH_ENABLED=false` abre todos los endpoints para pruebas y el panel entra sin login.
+`AUTH_ENABLED=true` restaura la sesión Bearer, la autorización por comercio y ApplePass.
+
+La plantilla Unraid solo ejecuta el código del `SOURCE_REF` publicado que contiene.
+La plantilla publicada se fija al commit de código validado. Copiar su `SOURCE_REF`
+actual para descargar esta entrega, siguiendo [REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md).
+El Compose local usa directamente el código local.
+
 1. Crear una copia consistente de SQLite (con su API de backup o con la API detenida).
 2. Detener la aplicación con `docker compose -f docker-compose.deploy.yml down`.
    **No usar `down -v`**: los volúmenes son persistentes.
@@ -144,9 +157,9 @@ valor, escribir `$$` segun el escape de Docker Compose. No publicar el fichero
 privado: contiene secretos; esta excluido en `.gitignore`. No ejecutar `config`
 sin `--quiet` al compartir salidas, porque muestra la configuracion resuelta.
 
-El codigo se descarga del commit fijado. Estos nuevos cambios necesitan publicarse
-antes de usarlos desde GitHub; no seleccionar un commit anterior esperando el nuevo
-comportamiento. La plantilla se regenera desde la configuracion canonica con
+El codigo se descarga del commit fijado. Usar el nuevo `SOURCE_REF` de la plantilla
+publicada; no seleccionar un commit anterior esperando el nuevo comportamiento.
+La plantilla se regenera desde la configuracion canonica con
 `python scripts/render_install_compose.py`. La prueba
 `python scripts/check_deployment.py --inline` valida esta variante desde cero,
 con archivo fuente local y recursos temporales, sin publicar codigo ni usar datos reales.
@@ -155,15 +168,16 @@ con archivo fuente local y recursos temporales, sin publicar codigo ni usar dato
 
 La API sirve una portada en `/`, Swagger UI en `/docs`, ReDoc en `/redoc` y el esquema
 en `/openapi.json`, sin autenticacion para leer la documentacion. Las operaciones
-administrativas siguen requiriendo autenticacion. Nginx tambien publica estos tres
+administrativas requieren autenticacion solo con `AUTH_ENABLED=true`. Nginx tambien publica estos tres
 recursos desde el dominio de administracion y el menu incluye un enlace.
 
 Si el tunel de `api.slmartinez.org` solo publica logos, anadir una ruta para ese
 hostname con Path `^/(docs(/.*)?|redoc|openapi[.]json)?$`, servicio HTTP `api:8000`.
 Conservar la ruta de logos y el resto de rutas Wallet necesarias. El dominio admin
 usa Path vacio y HTTP `admin-web:80`. Comprobar `/docs` y `/openapi.json` desde fuera.
-Las restricciones de ingesta se mantienen en ambos dominios; publicar documentacion
-no implica abrir indiscriminadamente todas las operaciones.
+Para probar toda la API desde su dominio, publicar el hostname completo con Path
+vacio hacia HTTP `api:8000`, incluyendo `/api/v1/public/pass-assets/`. El modo
+`AUTH_ENABLED=false` permite ejecutar todas las operaciones sin credenciales.
 
 
 ## Unraid: los cuatro botones del editor

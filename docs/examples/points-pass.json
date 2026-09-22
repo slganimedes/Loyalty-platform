@@ -1,0 +1,63 @@
+{
+  "id": "1234567890.enrollment_55555555555545558555555555555555",
+  "classId": "1234567890.points_33333333333343338333333333333333",
+  "state": "ACTIVE",
+  "logo": {
+    "sourceUri": {
+      "uri": "https://api.example.com/api/v1/public/pass-assets/44444444-4444-4444-8444-444444444441"
+    },
+    "contentDescription": {
+      "defaultValue": {
+        "language": "es-ES",
+        "value": "Logo de Cafetería Aurora"
+      }
+    }
+  },
+  "cardTitle": {
+    "defaultValue": {
+      "language": "es-ES",
+      "value": "Cafetería Aurora"
+    }
+  },
+  "subheader": {
+    "defaultValue": {
+      "language": "es-ES",
+      "value": "Cliente"
+    }
+  },
+  "header": {
+    "defaultValue": {
+      "language": "es-ES",
+      "value": "Ana Demo"
+    }
+  },
+  "textModulesData": [
+    {
+      "id": "puntos",
+      "header": "Puntos",
+      "body": "320"
+    },
+    {
+      "id": "cliente_desde",
+      "header": "Cliente desde",
+      "body": "sep 2026"
+    }
+  ],
+  "barcode": {
+    "type": "QR_CODE",
+    "value": "synthetic-fixture-only-not-valid-for-redemption",
+    "alternateText": "Canjea tus puntos en el comercio"
+  },
+  "hexBackgroundColor": "#373839",
+  "heroImage": {
+    "sourceUri": {
+      "uri": "https://api.example.com/api/v1/public/pass-assets/44444444-4444-4444-8444-444444444442"
+    },
+    "contentDescription": {
+      "defaultValue": {
+        "language": "es-ES",
+        "value": "Imagen de la campaña Puntos Aurora"
+      }
+    }
+  }
+}

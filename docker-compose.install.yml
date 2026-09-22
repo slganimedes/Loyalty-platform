@@ -16,6 +16,9 @@ x-installation:
   APPLE_CERT_PASSWORD: &apple_password ""
   APPLE_WEBSERVICE_URL: &apple_url "https://api.slmartinez.org"
   SESSION_HOURS: &session_hours "12"
+  AUTH_ENABLED: &auth_enabled "false"
+  PASS_ASSET_MAX_BYTES: &asset_max_bytes "4194304"
+  PASS_ASSET_MAX_PIXELS: &asset_max_pixels "16777216"
   CLOUDFLARE_TUNNEL_TOKEN: &tunnel_token ""
   DATA_MOUNT: &data_mount "./data:/data"
   CERTS_MOUNT: &certs_mount "./data/certs:/certs:ro"
@@ -99,6 +102,7 @@ services:
       SOURCE_REF: *source_ref
       DATABASE_URL: sqlite:////data/loyalty.db
       ASSETS_DIR: /data/assets
+      AUTH_ENABLED: *auth_enabled
       PAN_HASH_SECRET: *pan_secret
       BOOTSTRAP_ADMIN_USERNAME: *admin_user
       BOOTSTRAP_ADMIN_PASSWORD: *admin_password
@@ -113,6 +117,8 @@ services:
       APPLE_WWDR_CERT_PATH: /certs/wwdr.pem
       APPLE_WEBSERVICE_URL: *apple_url
       SESSION_HOURS: *session_hours
+      PASS_ASSET_MAX_BYTES: *asset_max_bytes
+      PASS_ASSET_MAX_PIXELS: *asset_max_pixels
     depends_on:
       source:
         condition: service_completed_successfully

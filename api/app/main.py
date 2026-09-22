@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .config import settings
@@ -15,6 +16,7 @@ from .db import init_db
 from .routers import (
     assignments,
     auth,
+    campaigns,
     customers,
     merchants,
     settings_wallet,
@@ -32,7 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from .models import AdminUser
     from .services.security import hash_password
 
-    if settings.bootstrap_admin_password:
+    if settings.auth_enabled and settings.bootstrap_admin_password:
         with SessionLocal() as db:
             if (
                 not db.query(AdminUser)
@@ -47,14 +49,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     )
                 )
                 db.commit()
-    from .services.passes import retry_pending_revocations
+    from .services.passes import maintenance
 
     stop = asyncio.Event()
 
     async def retry_worker() -> None:
         while not stop.is_set():
             try:
-                await asyncio.to_thread(retry_pending_revocations)
+                await asyncio.to_thread(maintenance)
             except Exception as exc:
                 logging.getLogger("passes").warning(
                     "Revocation retry failed: %s", type(exc).__name__
@@ -75,11 +77,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="SME Loyalty Platform API",
     version="0.1.0",
-    description="Wallet-based loyalty for Getnet merchants (MVP / pilot).",
+    description="Campaigns, designs and enrollments. AUTH_ENABLED=false opens every endpoint for testing, including administration and Apple callbacks. AUTH_ENABLED=true restores bearer/ApplePass authentication and merchant authorization.",
     lifespan=lifespan,
 )
 
-# Admin origins are explicit; wallet callbacks and ingestion remain public.
+# Admin origins are explicit; images and provider-authenticated callbacks are public.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.public_admin_url, "http://localhost:5173", "http://localhost:8080"],
@@ -98,6 +100,7 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+app.include_router(campaigns.router)
 app.include_router(merchants.router)
 app.include_router(customers.router)
 app.include_router(assignments.router)
@@ -105,6 +108,29 @@ app.include_router(transactions.router)
 app.include_router(settings_wallet.router)
 app.include_router(auth.router)
 app.include_router(wallet_passes.router)
+
+
+def openapi_schema() -> dict:
+    # Swagger must reflect actual access mode, including tests that switch configuration.
+    if (
+        app.openapi_schema is None
+        or getattr(app.state, "schema_auth", None) != settings.auth_enabled
+    ):
+        schema = get_openapi(
+            title=app.title, version=app.version, description=app.description, routes=app.routes
+        )
+        if not settings.auth_enabled:
+            schema.get("components", {}).pop("securitySchemes", None)
+            for path in schema["paths"].values():
+                for operation in path.values():
+                    if isinstance(operation, dict):
+                        operation.pop("security", None)
+        app.openapi_schema = schema
+        app.state.schema_auth = settings.auth_enabled
+    return app.openapi_schema
+
+
+app.openapi = openapi_schema
 
 
 @app.exception_handler(RequestValidationError)

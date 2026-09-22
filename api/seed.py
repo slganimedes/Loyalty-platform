@@ -3,10 +3,41 @@
 Run:  python seed.py   (from the api/ directory, with the venv active)
 """
 
+import io
+
+from PIL import Image
+
 from app import models
 from app.config import settings
 from app.db import SessionLocal, init_db
+from app.schemas import CampaignCreate
+from app.services.campaigns import enrollment, save_campaign
+from app.services.pass_assets import store_image
 from app.services.security import hash_pan, hash_password
+
+
+def demo_campaign(db, merchant, kind, config):
+    assets = []
+    for size in ((128, 128), (800, 240)):
+        buffer = io.BytesIO()
+        Image.new("RGB", size, merchant.pass_color).save(buffer, "PNG")
+        assets.append(store_image(db, merchant.id, buffer.getvalue()).id)
+    return save_campaign(
+        db,
+        merchant,
+        CampaignCreate(
+            name=f"{merchant.name} rewards",
+            type=kind,
+            config=config,
+            design={
+                "logo_asset_id": assets[0],
+                "hero_asset_id": assets[1],
+                "background_color": merchant.pass_color,
+                "logo_description": f"Logo demo de {merchant.name}",
+                "hero_description": "Fondo de campaña demo",
+            },
+        ),
+    )
 
 
 def run() -> None:
@@ -14,7 +45,8 @@ def run() -> None:
     db = SessionLocal()
     try:
         if (
-            not db.query(models.AdminUser)
+            settings.auth_enabled
+            and not db.query(models.AdminUser)
             .filter_by(username=settings.bootstrap_admin_username)
             .first()
         ):
@@ -40,39 +72,39 @@ def run() -> None:
         cafe = models.Merchant(name="Café Central", pass_color="#B85042")
         db.add(cafe)
         db.flush()
-        db.add(
-            models.Campaign(
-                merchant_id=cafe.id,
-                type="points_per_spend",
-                config={"points": 1, "amount_unit": 10, "rounding": "floor"},
-            )
+        cafe_campaign = demo_campaign(
+            db, cafe, "points_per_spend", {"points": 1, "amount_unit": 10, "rounding": "floor"}
         )
-        db.add(
-            models.Customer(
-                merchant_id=cafe.id,
-                customer_code="CC-00817",
-                card_hash=hash_pan("4111111111111111"),
-                email="ana@example.com",
-            )
+        ana = models.Customer(
+            merchant_id=cafe.id,
+            name="Ana Demo",
+            customer_code="CC-00817",
+            card_hash=hash_pan("4111111111111111"),
+            email="ana@example.com",
         )
+        db.add(ana)
+        db.flush()
+        enrollment(db, cafe_campaign, ana)
 
         # Merchant 2: Tienda Sol
         sol = models.Merchant(name="Tienda Sol", pass_color="#2E6DA4")
         db.add(sol)
         db.flush()
-        db.add(
-            models.Campaign(
-                merchant_id=sol.id,
-                type="interaction",
-                config={"interactions_required": 10, "reward_description": "1 free menu"},
-            )
+        sol_campaign = demo_campaign(
+            db,
+            sol,
+            "interaction",
+            {"interactions_required": 10, "reward_description": "1 free menu"},
         )
-        db.add(
-            models.Customer(merchant_id=sol.id, customer_code="TS-00001", email="luis@example.com")
+        luis = models.Customer(
+            merchant_id=sol.id, name="Luis Demo", customer_code="TS-00001", email="luis@example.com"
         )
+        db.add(luis)
+        db.flush()
+        enrollment(db, sol_campaign, luis)
 
         db.commit()
-        print("Seed complete: configured admin, merchants 'Café Central' & 'Tienda Sol'.")
+        print("Seed complete: merchants 'Café Central' & 'Tienda Sol'.")
     finally:
         db.close()
 

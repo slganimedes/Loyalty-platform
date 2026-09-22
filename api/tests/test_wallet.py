@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import httpx
 import pytest
+from campaign_fixtures import create_campaign
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -304,7 +305,8 @@ def test_google_create_patch_and_signed_save_link(wallet_config, monkeypatch):
         token, certs=cert.public_bytes(serialization.Encoding.PEM), audience="google"
     )
     assert claims["payload"]["loyaltyObjects"][0]["id"].startswith("123.")
-    client.post(
+    create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={"type": "points_per_spend", "config": {"amount_unit": 10}},
     )
@@ -327,7 +329,8 @@ def test_provider_failure_preserves_payment_and_independent_provider(wallet_conf
         db.commit()
     google = Mock(return_value="https://pay.google.com/gp/v/save/test")
     monkeypatch.setattr(passes, "google_sync", google)
-    client.post(
+    create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={"type": "points_per_spend", "config": {"amount_unit": 10}},
     )
@@ -433,7 +436,8 @@ def test_concurrent_wallet_updates_end_at_latest_balance(wallet_config, monkeypa
         return "https://pay.google.com/gp/v/save/test"
 
     monkeypatch.setattr(passes, "google_sync", sync)
-    client.post(
+    create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={"type": "points_per_spend", "config": {"amount_unit": 1}},
     )

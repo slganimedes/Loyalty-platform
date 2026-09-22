@@ -9,9 +9,10 @@ proveedores. Solo puede existir una asignación activa por cliente, campaña y
 proveedor. Repetir la asignación devuelve la existente.
 
 Dar de alta un cliente, listar pases o registrar un pago no crea pases nuevos.
-El motor de recompensas mantiene la regla existente: aplica las campañas activas
-del comercio a los pagos identificados, independientemente de que el cliente haya
-instalado un pase. La asignación del pase no reinicia el historial de la campaña.
+El motor aplica solo las campañas activas en las que el cliente tiene una inscripción
+activa, independientemente de que haya instalado un pase. La asignación del pase no
+reinicia el historial. El diseño y la selección de clientes se gestionan en la campaña.
+Ver [diseños, inscripciones, migración y rollback](CAMPAIGN_DESIGNS.md).
 
 Cada campaña tiene nombre. En Google se crea una clase por campaña y un objeto
 por asignación. En Apple cada asignación tiene su propio número de serie y token.
@@ -32,7 +33,9 @@ información del cliente; este cambio no reasigna cupones a campañas.
 6. Abrir la URL o escanear el QR con el móvil y confirmar el alta en Wallet.
 
 El QR de alta contiene la URL de instalación. Es distinto del código QR que figura
-dentro de la tarjeta, que identifica al cliente para los pagos.
+dentro de la tarjeta, que identifica la inscripción mediante un token opaco. El endpoint
+de verificación devuelve la relación cliente/campaña; no autoriza pagos. En modo
+de prueba (`AUTH_ENABLED=false`) todos los endpoints admiten acceso sin credenciales.
 Los enlaces Google firmados duran una hora; **URL y QR** genera un enlace nuevo.
 Si falla el proveedor, la asignación permanece visible para reintentar con ese botón.
 La URL solo se muestra cuando la generación o sincronización ha tenido éxito.
@@ -67,8 +70,9 @@ incluidas las de clientes y campañas ya eliminados. No hace falta volver a crea
 el cliente o la campaña. Ejecutar una única instancia/worker de la API en este piloto.
 
 Una asignación anulada no se reactiva por un pago ni por consultar sus enlaces.
-Si cliente y campaña siguen activos, una nueva asignación explícita crea un pase
-con otro identificador; el antiguo permanece anulado.
+Si cliente, campaña e inscripción siguen activos, puede asignarse explícitamente de
+nuevo. Los GenericObjects de puntos reutilizan el identificador estable de la inscripción
+una vez confirmada la anulación; Apple y los pases Loyalty antiguos crean otra asignación.
 
 ## Datos anteriores
 
@@ -90,7 +94,8 @@ Hacer copia consistente de `loyalty.db` antes de actualizar.
 - `DELETE /api/v1/customers/{id}`: baja del cliente y de sus pases.
 - `DELETE /api/v1/merchants/{id}/campaigns/{campaign_id}`: baja de campaña y pases.
 
-Todas estas operaciones requieren sesión y respetan el comercio del administrador.
+Con `AUTH_ENABLED=true`, estas operaciones requieren sesión y respetan el comercio del
+administrador. Con `false`, cualquier visitante tiene acceso de administración para pruebas.
 Los endpoints anteriores de consulta/refresh de pases solo trabajan con
 asignaciones existentes; las claves de `pass_links` son el ID del pase para nuevas
 asignaciones y el proveedor para los pases antiguos.

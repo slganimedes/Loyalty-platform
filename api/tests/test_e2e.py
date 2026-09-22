@@ -1,3 +1,5 @@
+from campaign_fixtures import create_campaign
+
 """End-to-end tests covering the four PRD scenarios.
 
 Run:  pytest -v   (from the api/ directory)
@@ -13,6 +15,7 @@ from fastapi.testclient import TestClient
 # Use a temporary DB file for the test run
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["PAN_HASH_SECRET"] = "test-only-hmac-secret"
+os.environ["AUTH_ENABLED"] = "true"
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp.name}"
 
 from app import models
@@ -44,7 +47,8 @@ def merchant_id():
 
 def test_points_per_spend(merchant_id):
     # campaign: 1 point per 10 EUR
-    client.post(
+    created = create_campaign(
+        client,
         f"/api/v1/merchants/{merchant_id}/campaigns",
         json={
             "type": "points_per_spend",
@@ -54,7 +58,11 @@ def test_points_per_spend(merchant_id):
     # enroll a customer
     r = client.post(
         f"/api/v1/merchants/{merchant_id}/customers",
-        json={"customer_code": "C1", "email": "c1@example.com"},
+        json={
+            "customer_code": "C1",
+            "email": "c1@example.com",
+            "campaign_ids": [created.json()["id"]],
+        },
     )
     assert r.json()["customer"]["id"]
 
@@ -164,8 +172,7 @@ def payment(mid, **kwargs):
         "identifiers": {"customer_number": "C"},
     }
     payload.update(kwargs)
-    # Verify pilot ingestion truly works without admin authentication.
-    return TestClient(app).post("/api/v1/transactions", json=payload)
+    return client.post("/api/v1/transactions", json=payload)
 
 
 @pytest.mark.parametrize(
@@ -186,8 +193,8 @@ def test_stamps_are_per_campaign_not_points():
         ("interaction", {"interactions_required": 3, "reward_description": "Free tea"}),
     ]:
         assert (
-            client.post(
-                f"/api/v1/merchants/{mid}/campaigns", json={"type": kind, "config": config}
+            create_campaign(
+                client, f"/api/v1/merchants/{mid}/campaigns", json={"type": kind, "config": config}
             ).status_code
             == 200
         )
@@ -261,7 +268,9 @@ def test_matching_priority_and_card_hash():
 )
 def test_invalid_campaign(body):
     mid, _ = shop()
-    assert client.post(f"/api/v1/merchants/{mid}/campaigns", json=body).status_code == 422
+    assert (
+        create_campaign(client, f"/api/v1/merchants/{mid}/campaigns", json=body).status_code == 422
+    )
 
 
 def test_invalid_payment_and_enrollment():
@@ -292,7 +301,8 @@ def test_invalid_payment_and_enrollment():
 
 def test_concurrent_ingestion():
     mid, cid = shop()
-    client.post(
+    create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={"type": "points_per_spend", "config": {"points": 1, "amount_unit": 1}},
     )
@@ -373,7 +383,8 @@ def test_unmatched_duplicate_and_merchant_isolation():
 
 def test_inactive_campaign_and_dni_fallback():
     mid, cid = shop()
-    client.post(
+    create_campaign(
+        client,
         f"/api/v1/merchants/{mid}/campaigns",
         json={"type": "points_per_spend", "config": {"amount_unit": 1}, "active": False},
     )

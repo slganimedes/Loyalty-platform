@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response validation."""
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -35,6 +35,7 @@ class MerchantUpdate(MerchantLogo):
 
 
 class MerchantOut(BaseModel):
+    onboarding_status: str = "pending_campaign"
     model_config = ConfigDict(from_attributes=True)
     id: str
     name: str = Field(min_length=1, max_length=200)
@@ -47,6 +48,17 @@ class MerchantOut(BaseModel):
 
 # ---------- Customer ----------
 class CustomerCreate(BaseModel):
+    joined_on: date | None = None
+
+    @field_validator("joined_on")
+    @classmethod
+    def validate_joined_on(cls, value: date | None) -> date | None:
+        if value and value > datetime.now(timezone.utc).date():
+            raise ValueError("Customer joining date cannot be in the future")
+        return value
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    campaign_ids: list[str] = Field(default_factory=list, max_length=100)
     customer_code: str = Field(min_length=1, max_length=100)
     card_hash: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
@@ -56,6 +68,9 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerOut(BaseModel):
+    name: str | None = None
+    membership_status: str = "pending"
+    legacy_points_balance: int = 0
     model_config = ConfigDict(from_attributes=True)
     id: str
     merchant_id: str
@@ -78,7 +93,31 @@ class MovementOut(BaseModel):
 
 
 # ---------- Campaign ----------
+class PassDesignIn(BaseModel):
+    points_label: str | None = Field(default=None, min_length=1, max_length=80)
+    member_since_label: str | None = Field(default=None, min_length=1, max_length=80)
+    barcode_alternate_text: str | None = Field(default=None, min_length=1, max_length=200)
+    logo_asset_id: str | None = None
+    hero_asset_id: str | None = None
+    background_color: str = Field(default="#373839", pattern=r"^#[0-9a-fA-F]{6}$")
+    logo_description: str = Field(default="Campaign logo", min_length=1, max_length=200)
+    hero_description: str = Field(default="Campaign image", min_length=1, max_length=200)
+    subheader: str = Field(default="Cliente", min_length=1, max_length=100)
+    locale: Literal["es-ES", "en-US"] = "es-ES"
+
+
+class PassDesignOut(PassDesignIn):
+    legacy_review_required: bool = False
+    model_config = ConfigDict(from_attributes=True)
+    logo_url: str | None = None
+    hero_url: str | None = None
+
+
 class CampaignCreate(BaseModel):
+    description: str = Field(default="", max_length=2000)
+    design: PassDesignIn | None = None
+    customer_ids: list[str] = Field(default_factory=list, max_length=1000)
+    lifecycle: Literal["draft", "ready"] | None = None
     name: str = Field(default="Campaign", min_length=1, max_length=200)
     type: Literal["points_per_spend", "interaction", "coupon"]
     config: dict
@@ -115,6 +154,9 @@ class CouponConfig(BaseModel):
 
 
 class CampaignOut(BaseModel):
+    description: str = ""
+    lifecycle: str = "draft"
+    design: PassDesignOut | None = None
     model_config = ConfigDict(from_attributes=True)
     id: str
     merchant_id: str
@@ -122,6 +164,42 @@ class CampaignOut(BaseModel):
     type: str
     config: dict
     active: bool
+
+
+class EnrollmentBatch(BaseModel):
+    customer_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class EnrollmentOut(BaseModel):
+    id: str
+    campaign_id: str
+    customer_id: str
+    campaign_name: str
+    customer_name: str
+    customer_code: str
+    status: Literal["active", "suspended", "cancelled"]
+    enrolled_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    points_balance: int
+    pending_revocations: int = 0
+
+
+class PassAssetOut(BaseModel):
+    id: str
+    url: str
+    content_type: str
+    width: int
+    height: int
+    size: int
+
+
+class EnrollmentUpdate(BaseModel):
+    status: Literal["active", "suspended", "cancelled"]
+
+
+class BarcodeVerification(BaseModel):
+    token: str = Field(min_length=20, max_length=128)
 
 
 class PassAssignment(BaseModel):

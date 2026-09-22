@@ -59,3 +59,11 @@ and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
 `docker-compose.install.yml` to a private file and fill in `x-installation`.
 Regenerate that template with `python scripts/render_install_compose.py` after
 changes to the canonical Compose. Do not publish the private settings.
+# Actualización: diseño de campañas e inscripciones (2026-09-21)
+
+El flujo actual crea campañas con su diseño, imágenes, color y clientes opcionales.
+Los puntos proceden del ledger por cliente/campaña. El modo de prueba `AUTH_ENABLED=false`
+abre todos los endpoints; `true` restaura Bearer/ApplePass. El alta del cliente admite
+fecha y el pase muestra mes de tres letras y año desde su alta en el comercio.
+Consultar [CAMPAIGN_DESIGNS.md](CAMPAIGN_DESIGNS.md) para arquitectura, endpoints,
+migración automática, backup/rollback, fixtures y compatibilidad del despliegue.

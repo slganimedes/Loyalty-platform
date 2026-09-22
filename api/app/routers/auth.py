@@ -1,4 +1,4 @@
-"""Opaque, expiring admin sessions. Ingestion deliberately has no dependency here."""
+"""Optional opaque sessions. Public test mode grants an ephemeral super-admin identity."""
 
 import hashlib
 import secrets
@@ -23,10 +23,20 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def public_user() -> models.AdminUser:
+    user = models.AdminUser(
+        id="public-test", username="public-test", role="super_admin", language="es"
+    )
+    user.public_access = True
+    return user
+
+
 def current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> models.AdminUser:
+    if not settings.auth_enabled:
+        return public_user()
     session = (
         db.get(models.AdminSession, token_hash(credentials.credentials)) if credentials else None
     )
@@ -69,6 +79,7 @@ class LoginIn(BaseModel):
 
 
 class UserOut(BaseModel):
+    public_access: bool = False
     model_config = ConfigDict(from_attributes=True)
     id: str
     username: str
@@ -82,7 +93,15 @@ class UserUpdate(BaseModel):
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, db: Session = Depends(get_db)) -> dict:
+def login(body: LoginIn | None = None, db: Session = Depends(get_db)) -> dict:
+    if not settings.auth_enabled:
+        return {
+            "access_token": "",
+            "token_type": "bearer",
+            "user": UserOut.model_validate(public_user()),
+        }
+    if body is None:
+        raise HTTPException(422, "Username and password are required when AUTH_ENABLED=true")
     user = db.query(models.AdminUser).filter_by(username=body.username).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Invalid username or password")
@@ -117,9 +136,11 @@ def update_me(
 @router.post("/auth/logout")
 def logout(
     user: models.AdminUser = Depends(current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> dict:
+    if not settings.auth_enabled or credentials is None:
+        return {"status": "ok"}
     db.query(models.AdminSession).filter_by(token_hash=token_hash(credentials.credentials)).delete()
     db.commit()
     return {"status": "ok"}

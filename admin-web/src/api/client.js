@@ -2,11 +2,11 @@
 // Vite dev proxy and in production behind Cloudflare/Caddy).
 const BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 
-async function request(path, { method = "GET", body } = {}) {
+async function request(path, { method = "GET", body, raw = false } = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { "Content-Type": "application/json", ...(sessionStorage.getItem("token") ? {Authorization: `Bearer ${sessionStorage.getItem("token")}`} : {}) },
-    body: body ? JSON.stringify(body) : undefined,
+    headers: { "Content-Type": raw ? body.type || "application/octet-stream" : "application/json", ...(sessionStorage.getItem("token") ? {Authorization: `Bearer ${sessionStorage.getItem("token")}`} : {}) },
+    body: raw ? body : body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     if (res.status === 401 && path !== "/auth/login") window.dispatchEvent(new Event("session-expired"));
@@ -14,10 +14,20 @@ async function request(path, { method = "GET", body } = {}) {
     throw new Error(Array.isArray(error.detail) ? error.detail.map(e => `${e.loc.slice(1).join(".")}: ${e.msg}`).join("; ") : error.detail || res.statusText);
   }
   const ct = res.headers.get("content-type") || "";
-  return ct.includes("application/json") ? res.json() : res.text();
+  return ct.includes("application/json") ? res.json() : ct.startsWith("image/") ? res.blob() : res.text();
 }
 
 export const api = {
+  campaign: (id) => request(`/campaigns/${id}`),
+  updateCampaign: (id, body) => request(`/campaigns/${id}`, {method: "PUT", body}),
+  archiveCampaign: (id) => request(`/campaigns/${id}/archive`, {method: "POST"}),
+  campaignCustomers: (id) => request(`/campaigns/${id}/customers`),
+  enrollCampaign: (id, customer_ids) => request(`/campaigns/${id}/customers`, {method: "POST", body: {customer_ids}}),
+  membership: (id, cid, status) => request(`/campaigns/${id}/customers/${cid}`, {method: "PATCH", body: {status}}),
+  customerCampaigns: (cid) => request(`/customers/${cid}/campaigns`),
+  uploadPassAsset: (mid, file) => request(`/merchants/${mid}/pass-assets`, {method: "POST", body: file, raw: true}),
+  deletePassAsset: (mid, id) => request(`/merchants/${mid}/pass-assets/${id}`, {method: "DELETE"}),
+  assetContent: (mid, id) => request(`/merchants/${mid}/pass-assets/${id}/content`),
   listPasses: (mid) => request(`/merchants/${mid}/passes`),
   assignPass: (cid, body) => request(`/customers/${cid}/passes`, { method: "POST", body }),
   passLink: (cid, pid) => request(`/customers/${cid}/passes/${pid}/link`, { method: "POST" }),

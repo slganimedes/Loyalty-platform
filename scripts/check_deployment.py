@@ -4,6 +4,7 @@ Uses only synthetic credentials and isolated Docker resources. Production downlo
 the same archive format from GitHub; this fixture does not publish local changes.
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -80,6 +82,7 @@ def main() -> None:
             "BOOTSTRAP_ADMIN_PASSWORD": "synthetic-deployment-password",
             "PAN_HASH_SECRET": "synthetic-deployment-secret",
             "GOOGLE_ISSUER_ID": "",
+            "AUTH_ENABLED": "false",
             "CLOUDFLARE_TUNNEL_TOKEN": "",
             "PUBLIC_API_URL": "https://api.example.com",
             "PUBLIC_ADMIN_URL": "https://admin.example.com",
@@ -94,6 +97,7 @@ def main() -> None:
             )
             replacements = {
                 "source_ref": ref,
+                "auth_enabled": "false",
                 "source_url": environment["SOURCE_URL"],
                 "admin_user": environment["BOOTSTRAP_ADMIN_USERNAME"],
                 "admin_password": environment["BOOTSTRAP_ADMIN_PASSWORD"],
@@ -153,7 +157,97 @@ def main() -> None:
                 headers={"Content-Type": "application/json"},
             )
             with urllib.request.urlopen(request, timeout=15) as response:
-                token = json.load(response)["access_token"]
+                login = json.load(response)
+                assert login["user"]["public_access"] is True
+                token = login["access_token"]
+                assert token == ""
+
+            def api_call(path, body=None):
+                request = urllib.request.Request(
+                    base + "/api/v1" + path,
+                    data=json.dumps(body).encode() if body is not None else None,
+                    headers={
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json",
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    return json.load(response)
+
+            merchant = api_call("/merchants", {"name": "Deployment fixture"})
+            image = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAACAAAAAUCAIAAABj86gYAAAALElEQVR4nGP8z0BbwERj8xlGLSAIRoOIIBgNIoJgNIgIgtEgIghGg4iBEAAAKwkBJ9coQEsAAAAASUVORK5CYII="
+            )
+            assets = []
+            for _ in range(2):
+                request = urllib.request.Request(
+                    base + f"/api/v1/merchants/{merchant['id']}/pass-assets",
+                    data=image,
+                    headers={
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "image/png",
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    assets.append(json.load(response)["id"])
+            campaign = api_call(
+                f"/merchants/{merchant['id']}/campaigns",
+                {
+                    "name": "Persistent rewards",
+                    "type": "points_per_spend",
+                    "config": {},
+                    "design": {
+                        "logo_asset_id": assets[0],
+                        "hero_asset_id": assets[1],
+                        "background_color": "#123456",
+                    },
+                },
+            )
+            customer = api_call(
+                f"/merchants/{merchant['id']}/customers",
+                {
+                    "customer_code": "DEPLOY-1",
+                    "name": "Synthetic customer",
+                    "campaign_ids": [campaign["id"]],
+                },
+            )
+            payment = api_call(
+                "/transactions",
+                {
+                    "merchant_id": merchant["id"],
+                    "external_transaction_id": "deployment-payment",
+                    "amount": 20,
+                    "identifiers": {"customer_number": "DEPLOY-1"},
+                },
+            )
+            assert payment["points_delta"] == 2
+            subprocess.run(
+                command + ["restart", "api"], env=environment, cwd=root, check=True
+            )
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    with urllib.request.urlopen(
+                        base + "/health", timeout=3
+                    ) as response:
+                        assert response.status == 200
+                    break
+                except (OSError, AssertionError):
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.5)
+            saved = api_call(f"/campaigns/{campaign['id']}")
+            assert saved["design"]["background_color"] == "#123456"
+            assert (
+                api_call(f"/customers/{customer['customer']['id']}/campaigns")[0][
+                    "points_balance"
+                ]
+                == 2
+            )
+            with urllib.request.urlopen(
+                base + "/api/v1/public/pass-assets/" + assets[0], timeout=15
+            ) as response:
+                assert response.read().startswith(b"\x89PNG")
             request = urllib.request.Request(
                 base + "/api/v1/auth/logout",
                 data=b"{}",
@@ -165,7 +259,7 @@ def main() -> None:
             with urllib.request.urlopen(request, timeout=15) as response:
                 assert response.status == 200
             print(
-                "Standalone Compose passed: source archive, dependency install, web build, health, SPA routes and authentication."
+                "Standalone Compose passed: source archive, dependency install, web build, health, authentication, design/image uploads, enrollment, payment and persistence after API restart."
             )
         finally:
             # Only the unique test project and its named volumes are removed.

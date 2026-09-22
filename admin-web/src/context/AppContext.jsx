@@ -11,14 +11,14 @@ export function AppProvider({ children }) {
   const [error, setError] = useState("");
   const t = (key) => translations[lang][key] ?? key;
   function applyUser(u) {
+    if (u.public_access) { u = {...u, language: localStorage.getItem("lang") === "en" ? "en" : "es"}; sessionStorage.removeItem("token"); }
     setUser(u); setLang(u.language); localStorage.setItem("lang", u.language);
     setMerchantId(u.merchant_id || "");
   }
   useEffect(() => {
     const expired = () => { setUser(null); setMerchantId(""); sessionStorage.removeItem("token"); };
     window.addEventListener("session-expired", expired);
-    if (sessionStorage.getItem("token")) api.me().then(applyUser).catch(expired).finally(() => setReady(true));
-    else setReady(true);
+    api.me().then(applyUser).catch(expired).finally(() => setReady(true));
     return () => window.removeEventListener("session-expired", expired);
   }, []);
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);

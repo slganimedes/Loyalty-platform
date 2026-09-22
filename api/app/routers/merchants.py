@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from ..schemas import (
     MerchantOut,
     MerchantUpdate,
 )
+from ..services import campaigns as campaign_service
 from ..services import passes
 from ..services.logos import decode_logo
 from .auth import current_user, merchant_access, super_admin
@@ -159,6 +161,7 @@ def delete_merchant(
     merchant.status = "deleted"
     for customer in merchant.customers:
         customer.deleted = True
+        campaign_service.cancel_enrollments(db, customer_id=customer.id)
     for campaign in merchant.campaigns:
         campaign.deleted = True
         campaign.active = False
@@ -194,12 +197,20 @@ def enroll_customer(
     c = models.Customer(
         merchant_id=merchant_id,
         customer_code=body.customer_code,
+        name=body.name,
+        created_at=datetime.combine(body.joined_on, time.min) if body.joined_on else models._now(),
         card_hash=card_hash,
         email=body.email,
         dni=body.dni,
     )
     db.add(c)
     try:
+        db.flush()
+        for campaign_id in set(body.campaign_ids):
+            campaign = db.get(models.Campaign, campaign_id)
+            if not campaign or campaign.merchant_id != merchant_id:
+                raise HTTPException(404, "Campaign not found in merchant")
+            campaign_service.enrollment(db, campaign, c)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -226,10 +237,7 @@ def create_campaign(
     merchant: models.Merchant = Depends(merchant_access),
 ) -> models.Campaign:
     lock_live_merchant(db, merchant_id)
-    if body.type not in ("points_per_spend", "interaction", "coupon"):
-        raise HTTPException(400, "Invalid campaign type")
-    camp = models.Campaign(merchant_id=merchant_id, **body.model_dump())
-    db.add(camp)
+    camp = campaign_service.save_campaign(db, merchant, body)
     db.commit()
     db.refresh(camp)
     return camp
@@ -258,6 +266,7 @@ def delete_campaign(
         raise HTTPException(404, "Campaign not found")
     campaign.active = False
     campaign.deleted = True
+    campaign_service.cancel_enrollments(db, campaign_id=campaign.id)
     rows = db.query(models.Pass).filter_by(campaign_id=campaign_id).all()
     passes.mark_revoked(db, rows)
     db.commit()

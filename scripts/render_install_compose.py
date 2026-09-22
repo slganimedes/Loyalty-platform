@@ -22,6 +22,9 @@ def render(root: Path) -> str:
         "APPLE_CERT_PASSWORD": ("apple_password", ""),
         "APPLE_WEBSERVICE_URL": ("apple_url", "https://api.slmartinez.org"),
         "SESSION_HOURS": ("session_hours", "12"),
+        "AUTH_ENABLED": ("auth_enabled", "false"),
+        "PASS_ASSET_MAX_BYTES": ("asset_max_bytes", "4194304"),
+        "PASS_ASSET_MAX_PIXELS": ("asset_max_pixels", "16777216"),
         "CLOUDFLARE_TUNNEL_TOKEN": ("tunnel_token", ""),
     }
     import json

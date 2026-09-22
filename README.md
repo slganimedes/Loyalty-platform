@@ -10,6 +10,28 @@ Wallet creation/updates are implemented. Real provider credentials are required 
 phone delivery. The local Docker stack has been validated with both services healthy.
 See `docs/DEPLOYMENT_README.md` for validation and deployment prerequisites.
 
+Campaign creation now includes a pass designer (logo, hero, color, preview and
+optional customers). Customers enroll explicitly in one or more campaigns of
+their merchant; points come from each campaign's ledger. See the complete
+[design, API, migration and rollback guide](docs/CAMPAIGN_DESIGNS.md) and the
+[generated points-pass example](docs/examples/points-pass.json).
+
+The published test configuration uses **`AUTH_ENABLED=false`**: the admin opens
+without login and every API endpoint accepts requests without authentication,
+including payments, Wallet settings and Apple callbacks. Anyone with the URL can
+read and modify data. Set `AUTH_ENABLED=true` to restore sessions and tenant authorization.
+
+The campaign designer requests logo, hero, accessible descriptions, background color,
+customer label, points label, customer-since label, QR text and pass language.
+Merchant name, customer name, campaign points and generated identifiers come from
+the database. Customers can enter a joining date at registration (`joined_on`);
+it is stored in the existing `Customer.created_at` and displayed as **`sep 2026`**.
+This is the customer's date at the merchant, not the campaign enrollment date.
+
+Campaigns without a design are inactive drafts; customers without campaigns are
+pending. Existing balances, passes, images and joining dates are preserved.
+For redeployment, follow [the Unraid update instructions](docs/REDEPLOY_UNRAID.md).
+
 ## Quick start (local)
 
 ```bash
@@ -37,14 +59,16 @@ docker compose up -d --build
 Try the API at **http://localhost:8000/docs** and the Docker admin at
 **http://localhost:8080**. Ports bind only to loopback. Cloudflare is optional:
 `docker compose --profile tunnel up -d --build`. Sign in using the bootstrap
-username and generated password in `.env`.
+username and generated password in `.env` only if `AUTH_ENABLED=true`; the default
+test mode opens the admin immediately.
 
 ## Merchant logos and payment simulation
 
 In **Merchants**, select a PNG, JPG or WebP logo when creating or editing a merchant
 (up to 2 MB and 2048 × 2048 pixels). The browser converts it to PNG; the API stores
 the image bytes in SQLite. You can preview, replace or remove the logo, and both
-Wallet providers use the stored image. Existing databases gain the logo column
+legacy Wallet passes use the stored image. New campaign passes use the campaign's
+own uploaded logo and hero. Existing databases gain the logo column
 automatically on startup; back up your database before upgrading.
 
 In **Payments**, choose the merchant and one of its customers, enter the amount
@@ -86,8 +110,8 @@ See **`docs/Unraid_Cloudflare.md`** (Unraid + Cloudflare Tunnel, `slmartinez.org
 
 ## Security notes (pilot)
 - PAN is stored only as an irreversible hash (`PAN_HASH_SECRET`).
-- The ingestion endpoint (`POST /api/v1/transactions`) has **no auth** by design — protect it
-  with Cloudflare WAF/Access. Add API-key/mTLS before production.
+- `AUTH_ENABLED=false` deliberately opens **all** API routes for platform testing.
+  `AUTH_ENABLED=true` restores Bearer sessions, merchant authorization and ApplePass tokens.
 - Never commit `.env`, certificates, or the SQLite DB.
 
 ## Build it out with your AI agent
