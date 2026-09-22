@@ -4,7 +4,7 @@
 # SOURCE_REF pins the application release. Keep the new default when upgrading.
 # Never commit private settings. Escape literal dollar signs in inline values as $$.
 x-installation:
-  SOURCE_REF: &source_ref "${SOURCE_REF:-38bcca181f12ec258f885e31961604386f6f7532}"
+  SOURCE_REF: &source_ref "${SOURCE_REF:-b795b88005facab100a69bff759fc8e0b2842bc6}"
   SOURCE_URL: &source_url "${SOURCE_URL:-}"
   GITHUB_TOKEN: &github_token "${GITHUB_TOKEN:-}"
   PAN_HASH_SECRET: &pan_secret "${PAN_HASH_SECRET:-REPLACE_WITH_STABLE_RANDOM_SECRET}"
