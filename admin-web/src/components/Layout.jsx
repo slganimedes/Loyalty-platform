@@ -47,13 +47,13 @@ export default function Layout() {
 
       <div className="main">
         <div className="topbar">
-          <div className="note">{user?.public_access ? t("publicTestMode") : `${user?.role === "super_admin" ? "Super Admin" : "SME Admin"} · ${user?.username}`}</div>
+          <div className="note">{`${user?.role === "super_admin" ? "Super Admin" : "SME Admin"} · ${user?.username}`}</div>
           <div className="right">
             <select aria-label={t("language")} value={lang} onChange={(e) => changeLang(e.target.value)} style={{ width: 90 }}>
               <option value="es">ES</option>
               <option value="en">EN</option>
             </select>
-            {!user?.public_access && <button className="ghost small" onClick={doLogout}>{t("logout")}</button>}
+            <button className="ghost small" onClick={doLogout}>{t("logout")}</button>
           </div>
         </div>
         <div className="content">

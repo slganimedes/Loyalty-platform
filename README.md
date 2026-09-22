@@ -16,10 +16,12 @@ their merchant; points come from each campaign's ledger. See the complete
 [design, API, migration and rollback guide](docs/CAMPAIGN_DESIGNS.md) and the
 [generated points-pass example](docs/examples/points-pass.json).
 
-The published test configuration uses **`AUTH_ENABLED=false`**: the admin opens
-without login and every API endpoint accepts requests without authentication,
-including payments, Wallet settings and Apple callbacks. Anyone with the URL can
-read and modify data. Set `AUTH_ENABLED=true` to restore sessions and tenant authorization.
+The test configuration uses **`AUTH_ENABLED=false`** for anonymous business API
+requests, including payments, Wallet settings and Apple callbacks. **The admin web
+always requires a username and password**; login, profile and logout keep real sessions.
+Authenticated requests retain the user's merchant permissions. Anyone with the API
+URL can still read and modify data anonymously in this test mode; the panel login
+does not restrict that API access. Set `AUTH_ENABLED=true` to protect business API calls too.
 
 The campaign designer requests logo, hero, accessible descriptions, background color,
 customer label, points label, customer-since label, QR text and pass language.
@@ -53,14 +55,19 @@ npm run dev            # http://localhost:5173  (proxies /api to the backend)
 
 # 4) Full stack with Docker
 cd ..
-docker compose up -d --build
+docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web
 ```
 
 Try the API at **http://localhost:8000/docs** and the Docker admin at
-**http://localhost:8080**. Ports bind only to loopback. Cloudflare is optional:
-`docker compose --profile tunnel up -d --build`. Sign in using the bootstrap
-username and generated password in `.env` only if `AUTH_ENABLED=true`; the default
-test mode opens the admin immediately.
+**http://localhost:8080**. Set `DATA_DIR=./data`, `CERTS_DIR=./data/certs`,
+`API_PORT=8000` and `ADMIN_PORT=8080` in existing local `.env` files (new ones
+include these defaults). The command above starts the application without the tunnel.
+On Unraid, **Compose Up starts Cloudflare automatically**. To run a dedicated local
+tunnel too, configure its token and omit `api admin-web` from the command.
+Both environments download the same pinned GitHub release. Sign in using the bootstrap
+username and generated password in `.env`, even with `AUTH_ENABLED=false`.
+`BOOTSTRAP_ADMIN_PASSWORD` creates a missing account; changing it does not overwrite
+the password of an existing account.
 
 ## Merchant logos and payment simulation
 
@@ -82,7 +89,7 @@ api/            FastAPI backend (models, schemas, routers, services, tests)
 admin-web/      Admin console — React SPA (Vite), bilingual ES/EN
 data/           SQLite DB + assets + certs (git-ignored)
 docs/           PRD, runbook, deployment guides, kickoff prompt
-docker-compose.yml   api + admin-web + cloudflared (Unraid/Cloudflare)
+docker-compose.unraid.yml   single stack for Unraid and local Docker, including Cloudflare
 .env.example    Copy to .env and fill in
 CLAUDE.md       Briefing for the IDE AI agent (Claude Code)
 .github/copilot-instructions.md   Instructions for Copilot Agent Mode
@@ -91,9 +98,10 @@ CLAUDE.md       Briefing for the IDE AI agent (Claude Code)
 
 ## Deployment
 For standalone deployment using **standard container images and source downloaded
-from GitHub**, use `docker-compose.deploy.yml` and follow
+from GitHub**, use `docker-compose.unraid.yml` in both environments and follow
 [the Compose deployment guide](docs/COMPOSE_DEPLOYMENT.md).
-`docker-compose.yml` remains the local development stack for unpublished changes.
+For unpublished changes, use native development or `python scripts/check_deployment.py`,
+which validates the working tree with isolated data using this same Compose.
 
 ## Campaign passes and deletion
 
@@ -110,8 +118,8 @@ See **`docs/Unraid_Cloudflare.md`** (Unraid + Cloudflare Tunnel, `slmartinez.org
 
 ## Security notes (pilot)
 - PAN is stored only as an irreversible hash (`PAN_HASH_SECRET`).
-- `AUTH_ENABLED=false` deliberately opens **all** API routes for platform testing.
-  `AUTH_ENABLED=true` restores Bearer sessions, merchant authorization and ApplePass tokens.
+- `AUTH_ENABLED=false` opens business API and Apple calls for platform testing.
+  Admin login, `/users/me` and logout remain protected. `true` protects business calls too.
 - Never commit `.env`, certificates, or the SQLite DB.
 
 ## Build it out with your AI agent
@@ -127,12 +135,12 @@ Google/Apple revocation retries. History is retained. The admin uses red Getnet-
 accents, rounded surfaces, accessible focus and responsive navigation.
 Public API documentation is available at `/docs` and linked from the API root
 and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
-(paths relative to the repository root). For installation without `.env`, copy
-`docker-compose.install.yml` to a private file and fill in `x-installation`.
-Regenerate that template with `python scripts/render_install_compose.py` after
-changes to the canonical Compose. Do not publish the private settings.
+(paths relative to the repository root). Both Unraid and local Docker use only
+`docker-compose.unraid.yml`. Edit `x-installation` privately in Unraid; locally use
+`.env` for paths, ports and credentials. See the Compose guide for both commands.
+Do not publish private settings.
 
 For the four-button Unraid Compose Manager editor, paste `docker-compose.unraid.yml`
 into **Compose File**, fill its installation settings and leave **Env File** empty.
-The tunnel starts automatically and no host ports are published. See
+The tunnel starts automatically; diagnostic ports bind only to loopback (18000/18080). See
 [the Unraid editor instructions](docs/COMPOSE_DEPLOYMENT.md#unraid-los-cuatro-botones-del-editor).

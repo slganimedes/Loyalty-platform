@@ -35,7 +35,8 @@ información del cliente; este cambio no reasigna cupones a campañas.
 El QR de alta contiene la URL de instalación. Es distinto del código QR que figura
 dentro de la tarjeta, que identifica la inscripción mediante un token opaco. El endpoint
 de verificación devuelve la relación cliente/campaña; no autoriza pagos. En modo
-de prueba (`AUTH_ENABLED=false`) todos los endpoints admiten acceso sin credenciales.
+de prueba (`AUTH_ENABLED=false`) la API de negocio admite acceso sin credenciales;
+el panel siempre exige contraseña y las rutas de perfil/logout siempre exigen sesión.
 Los enlaces Google firmados duran una hora; **URL y QR** genera un enlace nuevo.
 Si falla el proveedor, la asignación permanece visible para reintentar con ese botón.
 La URL solo se muestra cuando la generación o sincronización ha tenido éxito.

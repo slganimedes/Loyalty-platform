@@ -19,13 +19,13 @@ from app.services.points_pass import build_points_pass, format_customer_since
 wallet_config = wallet_fixture
 
 
-def test_public_mode_opens_admin_payments_uploads_and_swagger(monkeypatch):
+def test_public_api_keeps_admin_login_private_and_allows_business_operations(monkeypatch):
     monkeypatch.setattr(settings, "auth_enabled", False)
     public = TestClient(app)
-    assert public.get("/api/v1/users/me").json()["public_access"] is True
-    assert public.post("/api/v1/auth/login").status_code == 200
-    assert public.post("/api/v1/auth/logout").status_code == 200
-    assert public.patch("/api/v1/users/me", json={"language": "en"}).json()["language"] == "en"
+    assert public.get("/api/v1/users/me").status_code == 401
+    assert public.post("/api/v1/auth/login").status_code == 422
+    assert public.post("/api/v1/auth/logout").status_code == 401
+    assert public.patch("/api/v1/users/me", json={"language": "en"}).status_code == 401
     assert public.get("/api/v1/settings/wallet").status_code == 200
     mid = public.post("/api/v1/merchants", json={"name": "Public test shop"}).json()["id"]
     configured = design(public, mid)
@@ -86,11 +86,13 @@ def test_public_mode_opens_admin_payments_uploads_and_swagger(monkeypatch):
         == "Saldo"
     )
     schema = public.get("/openapi.json").json()
-    assert not schema.get("components", {}).get("securitySchemes")
-    for path in schema["paths"].values():
+    assert "HTTPBearer" in schema["components"]["securitySchemes"]
+    for url, path in schema["paths"].items():
         for operation in path.values():
             if isinstance(operation, dict):
-                assert not operation.get("security")
+                assert bool(operation.get("security")) == (
+                    url in ("/api/v1/users/me", "/api/v1/auth/logout")
+                )
     assert public.post(f"/api/v1/campaigns/{campaign['id']}/archive").status_code == 200
     assert public.delete(f"/api/v1/customers/{customer['id']}").status_code == 200
     assert public.delete(f"/api/v1/merchants/{mid}/campaigns/{campaign['id']}").status_code == 200
@@ -104,6 +106,30 @@ def test_public_mode_opens_admin_payments_uploads_and_swagger(monkeypatch):
     monkeypatch.setattr(settings, "auth_enabled", True)
     assert public.get("/api/v1/users/me").status_code == 401
     assert public.get("/openapi.json").json()["paths"]["/api/v1/transactions"]["post"]["security"]
+
+
+def test_public_api_still_validates_sessions_roles_expiry_and_logout(monkeypatch):
+    from test_e2e import test_auth_roles_language_and_logout
+
+    monkeypatch.setattr(settings, "auth_enabled", False)
+    browser = TestClient(app)
+    assert (
+        browser.post(
+            "/api/v1/auth/login", json={"username": "test-admin", "password": "wrong"}
+        ).status_code
+        == 401
+    )
+    login = browser.post(
+        "/api/v1/auth/login", json={"username": "test-admin", "password": "test-password"}
+    ).json()
+    assert login["access_token"] and login["user"]["public_access"] is False
+    browser.headers["Authorization"] = "Bearer " + login["access_token"]
+    assert browser.get("/api/v1/users/me").status_code == 200
+    assert browser.post("/api/v1/auth/logout").status_code == 200
+    assert browser.get("/api/v1/users/me").status_code == 401
+    assert browser.get("/api/v1/merchants").status_code == 401
+    # Repeat the complete SME isolation/language/logout regression in API-open mode.
+    test_auth_roles_language_and_logout(expect_anonymous=True)
 
 
 def test_public_apple_download_and_callbacks_need_no_tokens(wallet_config, monkeypatch):

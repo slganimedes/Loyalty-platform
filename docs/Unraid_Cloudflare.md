@@ -1,56 +1,40 @@
-# Deployment on Unraid with Cloudflare Tunnel — slmartinez.org
+# Unraid y Cloudflare Tunnel — slmartinez.org
 
-## Subdomains
-| Subdomain | Internal service | Use |
-|---|---|---|
-| `api.slmartinez.org` | `http://api:8000` | API: ingestion + Apple pass web service + Google Wallet |
-| `admin.slmartinez.org` | `http://admin-web:80` | Admin console (ES/EN) |
+El único archivo de arranque, tanto en Unraid como en local, es
+`docker-compose.unraid.yml`. **Cloudflare arranca automáticamente** al ejecutar
+Compose Up; no necesita un perfil adicional.
 
-One tunnel exposes both services.
+| Dominio público | Destino interno del túnel |
+| --- | --- |
+| `api.slmartinez.org` | `http://api:8000` |
+| `admin.slmartinez.org` | `http://admin-web:80` |
 
-## One-time setup
-1. **Move DNS to Cloudflare**: add `slmartinez.org`, switch nameservers, wait for **Active**.
-2. **Create the tunnel**: Zero Trust → Networks → Tunnels → Create (Cloudflared). Copy the **token** → `.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
-3. **Public hostnames** on the tunnel:
-   - `api.slmartinez.org` → HTTP → `api:8000`
-   - `admin.slmartinez.org` → HTTP → `admin-web:80`
+## Instalación
 
-## Unraid
-- Install **Community Applications** → **Docker Compose Manager**.
-- Put persistent data in appdata; map volumes:
-  - `/mnt/user/appdata/loyalty-platform/data:/data`
-  - `/mnt/user/appdata/loyalty-platform/certs:/certs`
-- Place the real `.env` in that appdata folder (never in git).
-- Paste this repo's `docker-compose.yml` into a new stack → **Compose Up**.
+1. En Cloudflare, crear/configurar el túnel y sus dos hostnames con esos destinos.
+2. En Docker Compose Manager de Unraid, pegar el archivo completo en **Compose File**.
+3. Rellenar los ajustes privados de `x-installation`, incluido
+   `CLOUDFLARE_TUNNEL_TOKEN`. Conservar las rutas de datos y certificados existentes,
+   el secreto PAN y la nueva referencia de código al actualizar.
+4. **Env File** puede estar vacío. Si contiene variables anteriores, revisar que no
+   sobrescriban `SOURCE_REF` o las rutas nuevas. Ejecutar **Compose Up**.
+5. Esperar a API/panel saludables y comprobar conexiones registradas en cloudflared.
 
-## Why no open ports
-`api`/`admin-web` use `expose` plus loopback-only host ports. Only `cloudflared` makes an **outbound**
-connection to Cloudflare. Result: zero inbound ports, IP never exposed, valid HTTPS at the edge.
-Works even behind CGNAT.
+El túnel hace conexiones salientes. Los puertos de diagnóstico del host solo
+escuchan en loopback, por defecto 18000 y 18080. No se requieren puertos abiertos
+en el router. La red interna conecta Cloudflare con los servicios por nombre.
 
-## Protect the ingestion endpoint (pilot)
-`AUTH_ENABLED=false` opens all endpoints for testing; no token is required, including
-payments and Wallet administration. Set it to `true` to restore sessions and tenant
-authorization. Cloudflare rules may add network restrictions,
-but public pass images under `/api/v1/public/pass-assets/` must remain readable by Google.
+## Comprobación
 
-## Verify
-From **outside your network** (mobile data): `https://api.slmartinez.org/docs` must load.
-Apple/Google only talk to the public HTTPS URL — never the local IP.
+Abrir ambos dominios desde datos móviles. El panel debe pedir usuario y contraseña;
+`https://api.slmartinez.org/docs` debe cargar la documentación.
+Con `AUTH_ENABLED=false` la API de negocio acepta llamadas anónimas, mientras
+perfil y logout siguen requiriendo sesión. Las imágenes públicas de los pases
+deben ser accesibles por Google/Apple sin una pantalla de login de Cloudflare.
 
-Start the tunnel with `docker compose --profile tunnel up -d --build`.
-Apply ingestion restrictions to both public hostnames because the admin host proxies `/api/`.
+Consultar los logs de cloudflared: un contenedor iniciado no garantiza conexión.
+La ruta interna `http://cloudflared:2000/ready` devuelve 200 cuando el conector
+está conectado; la guía Compose incluye el comando para comprobarlo desde la API.
 
-
-## Merchant deletion, design and installation update
-
-Merchant deletion is available to super admins with a server-generated impact
-summary, stale-confirmation protection, cascading logical deletion and durable
-Google/Apple revocation retries. History is retained. The admin uses red Getnet-inspired
-accents, rounded surfaces, accessible focus and responsive navigation.
-Public API documentation is available at `/docs` and linked from the API root
-and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
-(paths relative to the repository root). For installation without `.env`, copy
-`docker-compose.install.yml` to a private file and fill in `x-installation`.
-Regenerate that template with `python scripts/render_install_compose.py` after
-changes to the canonical Compose. Do not publish the private settings.
+Usar [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md) para instalación/local y
+[REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md) para actualizar conservando los datos.

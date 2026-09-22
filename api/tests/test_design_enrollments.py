@@ -506,7 +506,7 @@ def test_seed_creates_complete_designs_enrollments_and_is_repeatable(tmp_path, p
         "DATABASE_URL": f"sqlite:///{tmp_path / 'seed.db'}",
         "AUTH_ENABLED": "true" if protected else "false",
         "BOOTSTRAP_ADMIN_USERNAME": "seed-test",
-        "BOOTSTRAP_ADMIN_PASSWORD": "synthetic-seed-password" if protected else "",
+        "BOOTSTRAP_ADMIN_PASSWORD": "synthetic-seed-password",
         "PAN_HASH_SECRET": "synthetic-seed-hmac",
     }
     for _ in range(2):
@@ -516,7 +516,7 @@ def test_seed_creates_complete_designs_enrollments_and_is_repeatable(tmp_path, p
         assert result.returncode == 0, result.stderr
     engine = create_engine(env["DATABASE_URL"])
     with Session(engine) as db:
-        assert db.query(models.AdminUser).count() == (1 if protected else 0)
+        assert db.query(models.AdminUser).count() == 1
         assert db.query(models.Merchant).count() == 2
         assert db.query(models.CampaignEnrollment).count() == 2
         assert db.query(models.PassDesign).count() == 2

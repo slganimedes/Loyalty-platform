@@ -45,8 +45,7 @@ def run() -> None:
     db = SessionLocal()
     try:
         if (
-            settings.auth_enabled
-            and not db.query(models.AdminUser)
+            not db.query(models.AdminUser)
             .filter_by(username=settings.bootstrap_admin_username)
             .first()
         ):

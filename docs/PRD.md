@@ -19,7 +19,7 @@ to customers, then accrue rewards per transaction and update the assigned passes
 - **Super Admin** (bank): all merchants + wallet config.
 - **SME Admin** (merchant): own merchant only.
 - **End customer**: interacts only via the wallet pass (no login).
-Admin auth is optional: disabled in the requested public test mode; username + password when `AUTH_ENABLED=true`.
+Admin auth is mandatory: username + password and real sessions regardless of `AUTH_ENABLED`.
 
 ## 4. Key decisions (locked)
 1. Customers unique per merchant.
@@ -28,10 +28,10 @@ Admin auth is optional: disabled in the requested public test mode; username + p
 4. PAN never stored in clear — irreversible hash only.
 5. Points don't expire; no refunds/reversals in MVP.
 6. Real-time pass update on every change.
-7. All API endpoints are open in the default test mode; `AUTH_ENABLED=true` restores the protected deployment behavior.
+7. Business API endpoints are open in the default test mode; admin login/profile/logout remain protected. `AUTH_ENABLED=true` also requires authentication for business calls.
 8. SQLite + docker-compose.
 9. Wallet config in admin web with independent Apple/Google toggles.
-10. Admin web bilingual ES/EN, persisted per user (per browser in public mode), default ES.
+10. Admin web bilingual ES/EN, persisted per authenticated user, default ES.
 
 ## 5. Loyalty engine — 3 campaign types
 - **points_per_spend**: `{points, amount_unit, rounding}` (e.g. 1 pt / 10 €).
@@ -39,7 +39,7 @@ Admin auth is optional: disabled in the requested public test mode; username + p
 - **coupon**: `{amount}` issued to a customer; auto-redeemed at payment/QR.
 
 ## 6. Transaction ingestion (POST /transactions)
-- All endpoints, including ingestion, are open in test mode (`AUTH_ENABLED=false`). Optional `true` restores authentication and merchant authorization.
+- Business endpoints, including ingestion, accept anonymous calls in test mode (`AUTH_ENABLED=false`). Supplied sessions keep their merchant scope; `true` makes authentication mandatory for business calls too.
 - Same contract for Getnet / ecommerce / other.
 - Idempotent by `external_transaction_id`.
 - Matching priority: card_hash → customer_number → email → dni (scoped to merchant).
@@ -79,7 +79,7 @@ See `api/app/models/__init__.py` for the authoritative schema.
 
 ## 10. Security posture (MVP)
 - PAN hash only (HMAC-SHA256 keyed by PAN_HASH_SECRET) — validate with bank before prod.
-- Public test mode (`AUTH_ENABLED=false`) disables authentication across the API, panel and Apple callbacks. Anyone reaching the URL has administrative access. `true` restores Bearer/ApplePass authentication and tenant authorization.
+- API test mode (`AUTH_ENABLED=false`) permits anonymous business/Apple requests. The admin panel always requires credentials, and profile/logout always require a session. The panel login does not prevent direct anonymous API access in this mode. `true` also requires Bearer/ApplePass authentication for business requests.
 - Admin passwords hashed (bcrypt/argon2). TLS everywhere (Cloudflare edge).
 - Pre-production: add API-key/mTLS to ingestion; full GDPR; audit logging.
 
@@ -87,7 +87,7 @@ See `api/app/models/__init__.py` for the authoritative schema.
 Unraid (Docker Compose Manager) + Cloudflare Tunnel. Public hostnames:
 `api.slmartinez.org` → api:8000 ; `admin.slmartinez.org` → admin-web:80.
 Pass web-service URLs must use the public HTTPS domain, never a local IP.
-Use standalone `docker-compose.deploy.yml` with standard Python/Node/Nginx images;
+Use the single `docker-compose.unraid.yml` for Unraid and local Docker with standard Python/Node/Nginx images;
 source is downloaded from a pinned GitHub commit. No custom application images required.
 See [Unraid redeployment](REDEPLOY_UNRAID.md), [Compose deployment](COMPOSE_DEPLOYMENT.md), `Unraid_Cloudflare.md` and `DEPLOYMENT_README.md`.
 Do not publish to GitHub without an explicit user request.
@@ -101,7 +101,7 @@ Google/Apple revocation retries. History is retained. The admin uses red Getnet-
 accents, rounded surfaces, accessible focus and responsive navigation.
 Public API documentation is available at `/docs` and linked from the API root
 and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
-(paths relative to the repository root). For installation without `.env`, copy
-`docker-compose.install.yml` to a private file and fill in `x-installation`.
-Regenerate that template with `python scripts/render_install_compose.py` after
-changes to the canonical Compose. Do not publish the private settings.
+(paths relative to the repository root). Both Unraid and local Docker use only
+`docker-compose.unraid.yml`. Edit `x-installation` privately in Unraid; locally use
+`.env` for paths, ports and credentials. See the Compose guide for both commands.
+Do not publish private settings.

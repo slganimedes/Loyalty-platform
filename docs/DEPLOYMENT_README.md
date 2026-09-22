@@ -1,8 +1,8 @@
 # Running and deploying the MVP
 
 For deployment from a standalone Compose file with standard images and source from
-GitHub, use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md). The stack below builds
-local development code.
+GitHub, use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md). Both Unraid and local
+Docker use `docker-compose.unraid.yml` and download its pinned application release.
 
 ## Local Docker stack
 
@@ -11,9 +11,9 @@ From the repository root:
 
 ```bash
 python scripts/setup_env.py
-docker compose config --quiet
-docker compose up -d --build
-docker compose ps
+docker compose -f docker-compose.unraid.yml config --quiet
+docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web
+docker compose -f docker-compose.unraid.yml ps -a
 ```
 
 The setup script creates an ignored `.env` with random PAN-hashing and bootstrap
@@ -29,14 +29,16 @@ does not reset an existing account. There is no default `admin/admin` login.
 - Nginx proxies `/api/` and `/health` to the backend. SPA routes survive reloads.
 - Wallet providers default to disabled; no Apple/Google accounts are required to
   run the admin, loyalty engine or tests.
-- Cloudflare is an optional `tunnel` profile, so an empty tunnel token cannot
-  prevent the local application from starting.
+- Existing local `.env` files need `DATA_DIR=./data`, `CERTS_DIR=./data/certs`,
+  `API_PORT=8000`, `ADMIN_PORT=8080`; new files include them.
+- Cloudflare starts by default on Unraid. The local command selects only `api admin-web`
+  and their dependencies. Omit the service names to also start a configured tunnel.
 
-For optional demo merchants and campaigns: `docker compose exec api python seed.py`.
-For a merchant administrator:
+For optional demo merchants and campaigns (POSIX shell):
 
-```bash
-docker compose exec api python create_admin.py shop-owner --merchant-id MERCHANT_UUID
+```sh
+docker compose -f docker-compose.unraid.yml exec api sh -c 'cd /source/$SOURCE_REF/api && /python-env/$SOURCE_REF/bin/python seed.py'
+docker compose -f docker-compose.unraid.yml exec api sh -c 'cd /source/$SOURCE_REF/api && /python-env/$SOURCE_REF/bin/python create_admin.py shop-owner --merchant-id MERCHANT_UUID'
 ```
 
 This prompts for a password and grants access only to that merchant. Super admins
@@ -160,10 +162,11 @@ Provider references:
 
 ## Loyalty rules and ingestion
 
-The requested test configuration sets `AUTH_ENABLED=false`: every endpoint and the
-admin are accessible without credentials, including payments, Wallet settings and
-Apple callbacks. `AUTH_ENABLED=true` restores sessions and merchant authorization;
-in that mode external connectors authenticate and renew expired sessions. Do not place Cloudflare interactive
+The requested test configuration sets `AUTH_ENABLED=false`: business API calls,
+including payments, Wallet settings and Apple callbacks, allow anonymous access.
+The admin panel always requires username/password; profile and logout always use a session.
+`AUTH_ENABLED=true` also protects business API calls; external connectors then
+authenticate and renew expired sessions. Do not place Cloudflare interactive
 authentication in front of Apple callbacks, pass install links or public pass assets.
 See [campaign designs and migration](CAMPAIGN_DESIGNS.md) for the updated model,
 new upload limits, persistent storage, automatic pre-migration backup and rollback.
@@ -205,7 +208,7 @@ Keep `.env`, data and certificates in Unraid appdata. Configure the two tunnel
 hostnames as documented in `Unraid_Cloudflare.md`, set the tunnel token, then run:
 
 ```bash
-docker compose --profile tunnel up -d --build
+docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600
 ```
 
 The tunnel routes `api.slmartinez.org` to `api:8000` and `admin.slmartinez.org` to
@@ -296,5 +299,5 @@ The no-.env installer passed a complete isolated Compose deployment from a local
 source archive: standard images, source extraction, dependency installation,
 production build, health, API documentation/schema and login/logout. No real
 merchant was removed. The local stack was rebuilt after a verified SQLite backup.
-The new installer is `docker-compose.install.yml`; its private filled-in copy
-must not be committed. Documentation and creation templates have been updated.
+That historical installer has been superseded by `docker-compose.unraid.yml`,
+the only Compose for both local and Unraid startup. Private configuration must not be committed.

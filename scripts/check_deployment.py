@@ -1,16 +1,17 @@
-"""Exercise the standalone Compose with an unpublished local source archive.
+"""Validate the single Unraid/local Compose using isolated data and credentials.
 
-Uses only synthetic credentials and isolated Docker resources. Production downloads
-the same archive format from GitHub; this fixture does not publish local changes.
+By default use an archive of the working tree. --published downloads the pinned
+release from GitHub. Neither mode starts a real Cloudflare tunnel.
 """
 
+import argparse
 import base64
 import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
-import sys
 import tarfile
 import tempfile
 import time
@@ -25,7 +26,13 @@ def free_port() -> int:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--published", action="store_true", help="Download the pinned GitHub release"
+    )
+    args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    compose_file = root / "docker-compose.unraid.yml"
     project = f"loyalty-deploy-check-{os.getpid()}"
     files = (
         subprocess.check_output(
@@ -69,11 +76,24 @@ def main() -> None:
                 }
             )
         )
+        if args.published:
+            match = re.search(
+                r"SOURCE_REF:-([0-9a-f]{40})", compose_file.read_text(encoding="utf-8")
+            )
+            assert match, "Compose must pin a complete release SHA"
+            ref = match[1]
         api_port, admin_port = free_port(), free_port()
+        while admin_port == api_port:
+            admin_port = free_port()
         environment = {
-            **os.environ,
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("COMPOSE_")
+            },
             "SOURCE_REF": ref,
-            "SOURCE_URL": "http://fixture:8000/source.tar.gz",
+            "SOURCE_URL": "" if args.published else "http://fixture:8000/source.tar.gz",
+            "GITHUB_TOKEN": "",
             "DATA_DIR": (folder / "data").as_posix(),
             "CERTS_DIR": (folder / "data" / "certs").as_posix(),
             "API_PORT": str(api_port),
@@ -82,56 +102,54 @@ def main() -> None:
             "BOOTSTRAP_ADMIN_PASSWORD": "synthetic-deployment-password",
             "PAN_HASH_SECRET": "synthetic-deployment-secret",
             "GOOGLE_ISSUER_ID": "",
+            "APPLE_TEAM_ID": "",
+            "APPLE_CERT_PASSWORD": "",
             "AUTH_ENABLED": "false",
             "CLOUDFLARE_TUNNEL_TOKEN": "",
             "PUBLIC_API_URL": "https://api.example.com",
             "PUBLIC_ADMIN_URL": "https://admin.example.com",
         }
-        compose_file = root / "docker-compose.deploy.yml"
-        if "--inline" in sys.argv:
-            from render_install_compose import render
-
-            content = render(root)
-            assert content == (root / "docker-compose.install.yml").read_text(
-                encoding="utf-8"
-            )
-            replacements = {
-                "source_ref": ref,
-                "auth_enabled": "false",
-                "source_url": environment["SOURCE_URL"],
-                "admin_user": environment["BOOTSTRAP_ADMIN_USERNAME"],
-                "admin_password": environment["BOOTSTRAP_ADMIN_PASSWORD"],
-                "pan_secret": environment["PAN_HASH_SECRET"],
-                "data_mount": environment["DATA_DIR"] + ":/data",
-                "certs_mount": environment["CERTS_DIR"] + ":/certs:ro",
-                "api_port": f"127.0.0.1:{api_port}:8000",
-                "admin_port": f"127.0.0.1:{admin_port}:80",
-            }
-            import re
-
-            for anchor, value in replacements.items():
-                content = re.sub(
-                    r"&" + anchor + r' "[^"\n]*"',
-                    lambda match, anchor=anchor, value=value: (
-                        "&" + anchor + " " + json.dumps(value)
-                    ),
-                    content,
-                )
-            compose_file = folder / "compose.yml"
-            compose_file.write_text(content, encoding="utf-8")
+        empty_env = folder / "empty.env"
+        empty_env.write_text("")
         command = [
             "docker",
             "compose",
+            "--env-file",
+            str(empty_env),
             "-p",
             project,
             "-f",
             str(compose_file),
-            "-f",
-            str(override),
         ]
+        if not args.published:
+            command += ["-f", str(override)]
+        resolved = json.loads(
+            subprocess.check_output(
+                command + ["config", "--format", "json"],
+                env=environment,
+                cwd=root,
+            )
+        )
+        tunnel = resolved["services"]["cloudflared"]
+        assert not tunnel.get("profiles"), "Unraid must start Cloudflare by default"
+        assert tunnel["image"] == "cloudflare/cloudflared:latest"
+        assert tunnel["command"][-1] == "run"
+        assert all(
+            tunnel["depends_on"][service]["condition"] == "service_healthy"
+            for service in ("api", "admin-web")
+        )
+        assert tunnel["environment"]["TUNNEL_TOKEN"] == ""
+        for service in ("source", "web-build", "api", "admin-web"):
+            assert resolved["services"][service]["environment"]["SOURCE_REF"] == ref
+        print(
+            "Single Compose: Cloudflare enabled by default; testing application at "
+            + ref,
+            flush=True,
+        )
         try:
             subprocess.run(
-                command + ["up", "-d", "--wait", "--wait-timeout", "600"],
+                command
+                + ["up", "-d", "--wait", "--wait-timeout", "600", "api", "admin-web"],
                 env=environment,
                 cwd=root,
                 check=True,
@@ -158,16 +176,29 @@ def main() -> None:
             )
             with urllib.request.urlopen(request, timeout=15) as response:
                 login = json.load(response)
-                assert login["user"]["public_access"] is True
+                assert login["user"]["public_access"] is False
                 token = login["access_token"]
-                assert token == ""
+                assert token
+            # Admin sessions stay protected while business requests need no token.
+            try:
+                urllib.request.urlopen(base + "/api/v1/users/me", timeout=15)
+                raise AssertionError("Anonymous admin identity must be rejected")
+            except urllib.error.HTTPError as error:
+                assert error.code == 401
+            with urllib.request.urlopen(
+                urllib.request.Request(
+                    base + "/api/v1/users/me",
+                    headers={"Authorization": "Bearer " + token},
+                ),
+                timeout=15,
+            ) as response:
+                assert json.load(response)["username"] == "deployment-check"
 
             def api_call(path, body=None):
                 request = urllib.request.Request(
                     base + "/api/v1" + path,
                     data=json.dumps(body).encode() if body is not None else None,
                     headers={
-                        "Authorization": "Bearer " + token,
                         "Content-Type": "application/json",
                     },
                 )
@@ -184,7 +215,6 @@ def main() -> None:
                     base + f"/api/v1/merchants/{merchant['id']}/pass-assets",
                     data=image,
                     headers={
-                        "Authorization": "Bearer " + token,
                         "Content-Type": "image/png",
                     },
                 )
@@ -259,7 +289,7 @@ def main() -> None:
             with urllib.request.urlopen(request, timeout=15) as response:
                 assert response.status == 200
             print(
-                "Standalone Compose passed: source archive, dependency install, web build, health, authentication, design/image uploads, enrollment, payment and persistence after API restart."
+                "Single Compose passed: source, dependency install, web build, health, authentication, design/image uploads, enrollment, payment and persistence after API restart. Cloudflare is configured for default startup; real tunnel connection is checked on Unraid."
             )
         finally:
             # Only the unique test project and its named volumes are removed.

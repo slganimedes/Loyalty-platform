@@ -1,6 +1,6 @@
 # Campañas, inscripciones y diseño de pases
 
-Implementación actualizada el 22-09-2026. Esta guía sustituye las reglas anteriores de inscripción implícita. La configuración predeterminada permite probar toda la API y el panel sin autenticación (`AUTH_ENABLED=false`).
+Implementación actualizada el 22-09-2026. Esta guía sustituye las reglas anteriores de inscripción implícita. La configuración predeterminada permite probar la API de negocio sin autenticación (`AUTH_ENABLED=false`); el panel de administración siempre exige usuario, contraseña y sesión.
 
 ## Arquitectura y decisiones
 
@@ -41,9 +41,11 @@ Clientes permite indicar nombre, fecha de alta en el comercio y varias campañas
 
 ## API y autorización
 
-Prefijo `/api/v1`. Esquemas y cuerpos aparecen en `/docs`, `/redoc` y `/openapi.json`. Con `AUTH_ENABLED=false` todos los endpoints admiten acceso anónimo, incluidas escrituras, imágenes, pagos y callbacks/descargas Apple. La API usa un contexto de administrador transitorio, sin crear una cuenta ni emitir un token; `/users/me` devuelve `public_access=true`. El panel entra directamente y Swagger no solicita credenciales. Cualquier persona con acceso a la URL puede consultar y modificar todos los comercios en este modo.
+Prefijo `/api/v1`. Esquemas y cuerpos aparecen en `/docs`, `/redoc` y `/openapi.json`. Con `AUTH_ENABLED=false`, las operaciones de negocio admiten acceso anónimo, incluidas escrituras, imágenes, pagos y callbacks/descargas Apple. Solo las llamadas sin token usan un contexto de administrador transitorio. El panel siempre inicia sesión con credenciales reales: `/auth/login` valida usuario/contraseña, `/users/me` y `/auth/logout` siempre exigen Bearer. Se crean y revocan sesiones reales; el idioma se conserva por usuario. Una sesión aportada se valida y conserva el rol/comercio del administrador, aunque la API permita llamadas anónimas. Una sesión caducada o revocada nunca se convierte en acceso anónimo.
 
-Con `AUTH_ENABLED=true` se restauran las sesiones Bearer y los tokens Apple. Un `sme_admin` solo puede operar en su comercio; un `super_admin` puede seleccionar cualquiera. Se comprueba el comercio autenticado incluso cuando la URL/cuerpo contiene `merchant_id`. Las imágenes publicadas siguen siendo públicas. En ambos modos se impide vincular un cliente o imagen a campañas de otro comercio: las relaciones de datos se validan independientemente del control de acceso.
+Swagger mantiene la autenticación de las rutas de perfil/logout y deja sin requisito las operaciones de negocio. El login del panel no restringe las llamadas directas a la API abierta: cualquier persona que alcance su URL puede consultar y modificar los comercios sin token en este modo de prueba.
+
+Con `AUTH_ENABLED=true` también se exige sesión Bearer o token Apple para las operaciones de negocio. Un `sme_admin` autenticado solo puede operar en su comercio; un `super_admin` puede seleccionar cualquiera. Se comprueba el comercio autenticado incluso cuando la URL/cuerpo contiene `merchant_id`. Las imágenes publicadas siguen siendo públicas. En ambos modos se impide vincular un cliente o imagen a campañas de otro comercio: las relaciones de datos se validan independientemente del control de acceso.
 
 | Método y ruta | Comportamiento |
 | --- | --- |
@@ -66,7 +68,7 @@ Con `AUTH_ENABLED=true` se restauran las sesiones Bearer y los tokens Apple. Un 
 | POST `/merchants/{merchant_id}/customers` | Acepta `name`, `joined_on` y `campaign_ids` además de campos anteriores. |
 | POST `/transactions` | Solo acumula en inscripciones activas. Sesión y comercio autorizado cuando `AUTH_ENABLED=true`. |
 
-Se mantienen las rutas DELETE de clientes, campañas, pases y comercios. Los errores conservan `{detail: ...}`: 401 sin sesión y 403 otro comercio en modo protegido; 404 recurso inexistente/no perteneciente al comercio, 409 conflicto de estado, 413 tamaño y 422 validación de contenido/diseño. Los lotes inválidos se revierten completos. Las menciones a autorización en la tabla se aplican cuando `AUTH_ENABLED=true`.
+Se mantienen las rutas DELETE de clientes, campañas, pases y comercios. Los errores conservan `{detail: ...}`: 401 si falta una sesión requerida o se aporta una inválida; 403 al usar una sesión de otro comercio; 404 recurso inexistente/no perteneciente al comercio, 409 conflicto de estado, 413 tamaño y 422 validación de contenido/diseño. Los lotes inválidos se revierten completos. Las menciones a autorización en la tabla se aplican a sesiones aportadas y obligatoriamente cuando `AUTH_ENABLED=true`.
 
 Ejemplo de creación después de subir dos imágenes:
 
@@ -107,7 +109,7 @@ Variables:
 
 | Variable | Valor predeterminado / finalidad |
 | --- | --- |
-| `AUTH_ENABLED` | Nueva: `false`. API y panel abiertos para pruebas. `true` restaura autenticación y aislamiento de acceso por comercio. |
+| `AUTH_ENABLED` | Nueva: `false`. API de negocio abierta para pruebas; el panel siempre exige contraseña. `true` exige autenticación también para llamadas de negocio. |
 | `PUBLIC_API_URL` | Ya existente; URL pública HTTPS de la API, utilizada para logo y hero. Configurar el dominio real. |
 | `PUBLIC_ADMIN_URL` | Ya existente; origen del panel para CORS y Google Wallet. |
 | `PASS_ASSET_MAX_BYTES` | Nueva: 4194304 bytes (4 MiB), tanto original como PNG normalizado. |
@@ -153,7 +155,7 @@ Versión `20260921_campaign_designs`, en `api/app/migrations/campaign_designs.py
 
 Desplegar durante una ventana sin escrituras. Para revertir: detener `api`, `admin-web` y el acceso de pagos; guardar una copia del estado fallido; restaurar en `loyalty.db` el snapshot anterior, retirar únicamente sus archivos WAL/SHM con los procesos detenidos y volver al commit previo. Conservar el resto de `/data` y certificados; **no ejecutar `down -v`**. El snapshot revierte al instante del backup: si ya hubo actividad nueva, exportar y reconciliar esos movimientos antes de decidir restaurar. Volver de commit sin restaurar la base no es un rollback semántico seguro. Google/Apple no revierten cambios remotos por restaurar SQLite.
 
-Se actualizan Compose local, deploy, install y Unraid y su generador. La plantilla Unraid de esta entrega fija `SOURCE_REF` al commit publicado que contiene el código: hay que copiar la plantilla nueva completa y conservar la configuración privada de la instalación. Reiniciar contenedores con el SHA antiguo no descarga los cambios. El procedimiento está en [REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md). El Compose local compila el árbol de trabajo. La prueba standalone usa un archivo local de fuentes del mismo formato que GitHub, en recursos Docker aislados.
+Unraid y local usan únicamente `docker-compose.unraid.yml`, con Cloudflare incluido por defecto. La plantilla fija `SOURCE_REF` a una versión publicada; hay que conservar la nueva referencia y reponer los valores privados al actualizar. El procedimiento está en [REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md). La prueba `scripts/check_deployment.py` valida el árbol de trabajo con el mismo Compose y datos aislados; `--published` descarga la versión fijada desde GitHub.
 
 Cambios de compatibilidad: crear campaña sin diseño ahora produce borrador inactivo; alta de cliente sin campañas queda pendiente; asignar pase requiere inscripción; los pagos solo benefician a campañas inscritas. Con `AUTH_ENABLED=true`, los conectores de pagos deben obtener sesión con `/auth/login`, enviarla como `Authorization: Bearer ...` y renovarla al caducar. Con `false` no necesitan cabecera. La fecha visible del pase es ahora la antigüedad del cliente, en formato abreviado, y las nuevas etiquetas del diseño son columnas opcionales aditivas; no se reescriben fechas antiguas. No se ha introducido un sistema de API keys nuevo.
 
@@ -166,7 +168,7 @@ Cambios de compatibilidad: crear campaña sin diseño ahora produce borrador ina
 - API: `schemas/__init__.py`, `routers/{campaigns,merchants,customers,assignments,transactions,auth}.py`, `main.py`, `config.py`.
 - Interfaz: `components/{CampaignEditor,PassPreview}.jsx`, `pages/{Campaigns,Customers,Passes}.jsx`, `api/client.js`, `i18n/index.js`, `styles.css`.
 - Pruebas/fixtures: `api/tests/{campaign_fixtures,test_design_enrollments,test_campaign_passes,test_e2e,test_wallet,test_public_mode}.py`, `admin-web/tests/{campaign-fixtures,designer.spec,admin.spec,public-mode.spec}.js`.
-- Instalación: `.env.example`, los cuatro `docker-compose*.yml`, `admin-web/nginx.conf`, `api/requirements.txt`, `api/seed.py`, `scripts/{render_install_compose,check_deployment,export_points_example}.py`.
+- Instalación: `.env.example`, `docker-compose.unraid.yml`, `admin-web/nginx.conf`, `api/requirements.txt`, `api/seed.py`, `scripts/{check_deployment,export_points_example}.py`.
 - Documentación: README, PRD, guías de campañas/despliegue/Unraid, runbook, instrucciones de mantenimiento y ejemplo JSON.
 
 Los resultados finales y límites de validación se registran en [VALIDATION_CAMPAIGN_DESIGNS.md](VALIDATION_CAMPAIGN_DESIGNS.md).

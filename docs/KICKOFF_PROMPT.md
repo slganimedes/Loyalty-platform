@@ -18,11 +18,12 @@ continuing. Do not ask me to confirm between phases unless a decision truly bloc
    in `api/app/services/passes.py` (replace the stubs). Gate behind the wallet_config toggles.
 4. Build the real admin web (React) replacing `admin-web/index.html`: login, merchants,
    customers, campaigns, coupons, wallet-config screen with independent toggles, ES/EN i18n.
-5. Wire `.env`, confirm `docker compose up -d --build` runs the full stack.
+5. Wire `.env`, confirm `docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web` runs the full stack.
 6. Update `docs/DEPLOYMENT_README.md` if anything changed.
 
-**Constraints:** never store PAN in clear; never commit secrets; the user's test configuration opens
-all endpoints with `AUTH_ENABLED=false`. `true` restores Bearer/ApplePass protection.
+**Constraints:** never store PAN in clear; never commit secrets; admin web always requires credentials.
+The user's test configuration opens business API/Apple calls with `AUTH_ENABLED=false`, while
+login/profile/logout retain real sessions. `true` protects business calls too.
 See `CAMPAIGN_DESIGNS.md` for the explicit enrollment and design model, and `REDEPLOY_UNRAID.md` for redeployment.
 Keep Phase 2 items (cross-merchant, BI) OUT of scope.
 

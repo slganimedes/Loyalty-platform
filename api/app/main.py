@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from .models import AdminUser
     from .services.security import hash_password
 
-    if settings.auth_enabled and settings.bootstrap_admin_password:
+    if settings.bootstrap_admin_password:
         with SessionLocal() as db:
             if (
                 not db.query(AdminUser)
@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="SME Loyalty Platform API",
     version="0.1.0",
-    description="Campaigns, designs and enrollments. AUTH_ENABLED=false opens every endpoint for testing, including administration and Apple callbacks. AUTH_ENABLED=true restores bearer/ApplePass authentication and merchant authorization.",
+    description="Campaigns, designs and enrollments. AUTH_ENABLED=false allows anonymous business API and Apple Wallet calls for testing. Admin login always validates credentials; /users/me and /auth/logout always require a session. Supplied sessions retain their merchant scope. AUTH_ENABLED=true also requires authentication for business API and Apple Wallet calls.",
     lifespan=lifespan,
 )
 
@@ -120,8 +120,9 @@ def openapi_schema() -> dict:
             title=app.title, version=app.version, description=app.description, routes=app.routes
         )
         if not settings.auth_enabled:
-            schema.get("components", {}).pop("securitySchemes", None)
-            for path in schema["paths"].values():
+            for url, path in schema["paths"].items():
+                if url in ("/api/v1/users/me", "/api/v1/auth/logout"):
+                    continue
                 for operation in path.values():
                     if isinstance(operation, dict):
                         operation.pop("security", None)

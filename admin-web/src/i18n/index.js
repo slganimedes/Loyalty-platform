@@ -1,7 +1,6 @@
 // ES/EN dictionary. Language is persisted in the user record and cached locally.
 export const translations = {
   es: {
-    publicTestMode: "Modo de prueba · acceso sin autenticación",
     customerJoinedOn: "Fecha de alta del cliente", customerSinceHint: "El pase muestra la fecha de alta en el comercio con mes de tres letras y año: sep 2026.",
     designInstructions: "Sube las dos imágenes y configura los textos y el color del pase. Revisa el resultado antes de guardar.",
     passCardTitle: "Título del pase", merchantTitleHint: "Se obtiene del nombre comercial. Para cambiarlo, edita el comercio.",
@@ -144,7 +143,6 @@ export const translations = {
     id: "ID",
   },
   en: {
-    publicTestMode: "Test mode · access without authentication",
     customerJoinedOn: "Customer joining date", customerSinceHint: "The pass shows when the customer joined the merchant, with three month letters and year: Sep 2026.",
     designInstructions: "Upload both images and configure the pass text and color. Review the result before saving.",
     passCardTitle: "Pass title", merchantTitleHint: "Taken from the merchant's business name. Edit the merchant to change it.",

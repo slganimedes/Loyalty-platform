@@ -41,10 +41,10 @@ on Unraid, exposed through Cloudflare Tunnel (domain slmartinez.org).
 - (from api/) uvicorn app.main:app --reload   → http://localhost:8000/docs
 - (from api/) python seed.py                   → demo data (credentials from .env)
 - (from api/) pytest -v
-- docker compose up -d --build
+- docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web
 
 ## Definition of done
-1. docker compose up starts api + admin-web with no errors.
+1. docker compose -f docker-compose.unraid.yml up starts api + admin-web with no errors.
 2. GET /health returns ok; /docs loads.
 3. The four scenarios pass via pytest: points-per-spend, ecommerce, idempotency/unmatched, coupon.
 4. Admin web performs API operations and switches ES/EN.

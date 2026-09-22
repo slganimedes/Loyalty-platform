@@ -1,14 +1,23 @@
 import { test, expect } from "@playwright/test";
 import { fillDesign } from "./campaign-fixtures";
 
-test("public test mode enters without login and saves complete pass design and customer joining date", async ({page, request}) => {
+test("public API allows anonymous calls while admin requires login and saves complete design", async ({page, request}) => {
   test.skip(process.env.BROWSER_AUTH_ENABLED !== "false", "Run with BROWSER_AUTH_ENABLED=false");
   await page.addInitScript(() => localStorage.setItem("lang", "en"));
   await page.goto("/");
-  await expect(page.getByRole("heading", {name: "Merchants", level: 1, exact: true})).toBeVisible();
-  await expect(page.getByText("Test mode · access without authentication")).toBeVisible();
-  expect(await page.evaluate(() => sessionStorage.getItem("token"))).toBeNull();
+  await expect(page.getByRole("button", {name: "Sign in", exact: true})).toBeVisible();
+  expect((await request.get("/api/v1/users/me")).status()).toBe(401);
   const merchant = await (await request.post("/api/v1/merchants", {data: {name: "Open demo store"}})).json();
+  await page.getByLabel("Username", {exact: true}).fill("browser-admin");
+  await page.getByLabel("Password", {exact: true}).fill("incorrect-password");
+  await page.getByRole("button", {name: "Sign in", exact: true}).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByLabel("Password", {exact: true}).fill("browser-test-password");
+  await page.getByRole("button", {name: "Sign in", exact: true}).click();
+  // Language is stored per authenticated admin, whose default is Spanish.
+  await page.getByLabel(/Idioma|Language/).selectOption("en");
+  await expect(page.getByRole("heading", {name: "Merchants", level: 1, exact: true})).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("token"))).toBeTruthy();
   await page.getByRole("link", {name: "Customers", exact: true}).click();
   await page.getByLabel("Merchant", {exact: true}).selectOption(merchant.id);
   await page.getByLabel("Customer name", {exact: true}).fill("Open customer");
@@ -38,5 +47,11 @@ test("public test mode enters without login and saves complete pass design and c
   expect(campaign.design.barcode_alternate_text).toBe("Show this code");
   expect((await request.get(new URL(campaign.design.hero_url).pathname)).ok()).toBe(true);
   await page.reload();
-  await expect(page.getByText("Test mode · access without authentication")).toBeVisible();
+  await expect(page.getByRole("button", {name: "Log out", exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Log out", exact: true}).click();
+  await expect(page.getByRole("button", {name: "Sign in", exact: true})).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("token"))).toBeNull();
+  await page.goto("/campaigns");
+  await expect(page.getByRole("button", {name: "Sign in", exact: true})).toBeVisible();
+  expect((await request.get("/api/v1/merchants")).ok()).toBe(true);
 });

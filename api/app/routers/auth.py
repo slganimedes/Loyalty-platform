@@ -1,4 +1,4 @@
-"""Optional opaque sessions. Public test mode grants an ephemeral super-admin identity."""
+"""Admin sessions are mandatory; the business API optionally accepts anonymous calls."""
 
 import hashlib
 import secrets
@@ -31,12 +31,10 @@ def public_user() -> models.AdminUser:
     return user
 
 
-def current_user(
+def authenticated_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> models.AdminUser:
-    if not settings.auth_enabled:
-        return public_user()
     session = (
         db.get(models.AdminSession, token_hash(credentials.credentials)) if credentials else None
     )
@@ -50,6 +48,17 @@ def current_user(
     ):
         raise HTTPException(401, "Invalid session")
     return user
+
+
+def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> models.AdminUser:
+    # Anonymous API calls may be open, but supplied sessions must remain valid
+    # and scoped to their actual admin. Never elevate an expired or SME session.
+    if credentials is None and not settings.auth_enabled:
+        return public_user()
+    return authenticated_user(credentials, db)
 
 
 def super_admin(user: models.AdminUser = Depends(current_user)) -> models.AdminUser:
@@ -93,15 +102,7 @@ class UserUpdate(BaseModel):
 
 
 @router.post("/auth/login")
-def login(body: LoginIn | None = None, db: Session = Depends(get_db)) -> dict:
-    if not settings.auth_enabled:
-        return {
-            "access_token": "",
-            "token_type": "bearer",
-            "user": UserOut.model_validate(public_user()),
-        }
-    if body is None:
-        raise HTTPException(422, "Username and password are required when AUTH_ENABLED=true")
+def login(body: LoginIn, db: Session = Depends(get_db)) -> dict:
     user = db.query(models.AdminUser).filter_by(username=body.username).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Invalid username or password")
@@ -120,13 +121,15 @@ def login(body: LoginIn | None = None, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/users/me", response_model=UserOut)
-def me(user: models.AdminUser = Depends(current_user)) -> models.AdminUser:
+def me(user: models.AdminUser = Depends(authenticated_user)) -> models.AdminUser:
     return user
 
 
 @router.patch("/users/me", response_model=UserOut)
 def update_me(
-    body: UserUpdate, user: models.AdminUser = Depends(current_user), db: Session = Depends(get_db)
+    body: UserUpdate,
+    user: models.AdminUser = Depends(authenticated_user),
+    db: Session = Depends(get_db),
 ) -> models.AdminUser:
     user.language = body.language
     db.commit()
@@ -135,12 +138,10 @@ def update_me(
 
 @router.post("/auth/logout")
 def logout(
-    user: models.AdminUser = Depends(current_user),
+    user: models.AdminUser = Depends(authenticated_user),
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not settings.auth_enabled or credentials is None:
-        return {"status": "ok"}
     db.query(models.AdminSession).filter_by(token_hash=token_hash(credentials.credentials)).delete()
     db.commit()
     return {"status": "ok"}

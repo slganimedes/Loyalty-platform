@@ -3,11 +3,8 @@ set -eu
 case "${PAN_HASH_SECRET:-}" in
     ""|REPLACE_*) echo "Set a persistent PAN_HASH_SECRET before starting." >&2; exit 1 ;;
 esac
-case "${AUTH_ENABLED:-false}" in
-    true|True|TRUE|1)
-        case "${BOOTSTRAP_ADMIN_PASSWORD:-}" in
-            ""|REPLACE_*) echo "Set BOOTSTRAP_ADMIN_PASSWORD before starting." >&2; exit 1 ;;
-        esac ;;
+case "${BOOTSTRAP_ADMIN_PASSWORD:-}" in
+    ""|REPLACE_*) echo "Set BOOTSTRAP_ADMIN_PASSWORD before starting." >&2; exit 1 ;;
 esac
 cd "/source/$SOURCE_REF/api"
 runtime="/python-env/$SOURCE_REF"

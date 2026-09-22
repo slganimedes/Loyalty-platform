@@ -321,9 +321,9 @@ def test_concurrent_ingestion():
     assert client.get(f"/api/v1/customers/{cid}").json()["points_balance"] == 100
 
 
-def test_auth_roles_language_and_logout():
+def test_auth_roles_language_and_logout(expect_anonymous=False):
     anon = TestClient(app)
-    assert anon.get("/api/v1/merchants").status_code == 401
+    assert anon.get("/api/v1/merchants").status_code == (200 if expect_anonymous else 401)
     assert (
         anon.post(
             "/api/v1/auth/login", json={"username": "test-admin", "password": "wrong"}

@@ -20,7 +20,7 @@ Two tracks run in parallel: **A. Build** (offline with mock data) and **B. Accou
 6. **Admin web** — ✅ React SPA with login, merchant/customer/campaign/coupon/payment
    operations and ES/EN; complete browser workflow passes.
 7. **Wallet config screen** — ✅ Super Admin saves Apple/Google creds, independent toggles.
-8. **Docker** — ✅ `docker compose up -d --build --wait` validated on 2026-09-18;
+8. **Docker** — ✅ `docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web` uses the single Unraid/local Compose;
    both services healthy, HTTP and authentication through Nginx verified.
 9. **Deploy on Unraid** — pending: Cloudflare Tunnel, verify from mobile data.
 10. **Pilot** — pending: one real merchant; connect Getnet to the ingestion endpoint.
@@ -33,7 +33,7 @@ Two tracks run in parallel: **A. Build** (offline with mock data) and **B. Accou
 - React admin with authentication and persisted ES/EN, Docker packaging and browser tests.
 
 ## Definition of done
-`docker compose up` runs the stack; `/health` + `/docs` respond; `pytest` green (52 tests);
+`docker compose -f docker-compose.unraid.yml up` runs the stack; `/health` + `/docs` respond; `pytest` green (93 tests);
 admin web does what the API does and switches ES/EN; no secrets in git.
 
 ## Campaign passes and standalone deployment (2026-09-20)
@@ -55,15 +55,16 @@ Google/Apple revocation retries. History is retained. The admin uses red Getnet-
 accents, rounded surfaces, accessible focus and responsive navigation.
 Public API documentation is available at `/docs` and linked from the API root
 and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
-(paths relative to the repository root). For installation without `.env`, copy
-`docker-compose.install.yml` to a private file and fill in `x-installation`.
-Regenerate that template with `python scripts/render_install_compose.py` after
-changes to the canonical Compose. Do not publish the private settings.
+(paths relative to the repository root). Both Unraid and local Docker use only
+`docker-compose.unraid.yml`. Edit `x-installation` privately in Unraid; locally use
+`.env` for paths, ports and credentials. See the Compose guide for both commands.
+Do not publish private settings.
 # Actualización: diseño de campañas e inscripciones (2026-09-21)
 
 El flujo actual crea campañas con su diseño, imágenes, color y clientes opcionales.
 Los puntos proceden del ledger por cliente/campaña. El modo de prueba `AUTH_ENABLED=false`
-abre todos los endpoints; `true` restaura Bearer/ApplePass. El alta del cliente admite
+abre la API de negocio y callbacks Apple; el panel siempre exige contraseña y sesión.
+`true` protege también la API de negocio. El alta del cliente admite
 fecha y el pase muestra mes de tres letras y año desde su alta en el comercio.
 Consultar [CAMPAIGN_DESIGNS.md](CAMPAIGN_DESIGNS.md) para arquitectura, endpoints,
 migración automática, backup/rollback, fixtures y compatibilidad del despliegue.

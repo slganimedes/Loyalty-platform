@@ -32,7 +32,7 @@ Deployment (Unraid + Cloudflare Tunnel, domain `slmartinez.org`) in `docs/Unraid
 # dev (from api/)
 uvicorn app.main:app --reload        # dev server → http://localhost:8000/docs
 # full stack
-docker compose up --build            # api + admin-web (+ cloudflared in prod)
+docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web            # api + admin-web (omit service names to include cloudflared)
 ```
 
 ## Conventions
@@ -50,14 +50,14 @@ docker compose up --build            # api + admin-web (+ cloudflared in prod)
 - **Never store the PAN in clear** — only an irreversible hash. Never log full PAN.
 - **Never commit secrets** — `.env`, `.p12`, service-account JSON live only in Unraid `appdata`.
 - Pass web-service URLs must use the **public HTTPS domain** (`https://api.slmartinez.org`), never a local IP.
-- Current user requirement: `AUTH_ENABLED=false` opens all endpoints and the admin for testing, including Apple callbacks. Preserve the optional `AUTH_ENABLED=true` mode for sessions and tenant authorization. See `docs/REDEPLOY_UNRAID.md`.
+- Current user requirement: the admin web ALWAYS requires username/password and real sessions. `AUTH_ENABLED=false` opens business API calls and Apple callbacks for testing, not admin login/profile/logout. Supplied sessions retain their roles/tenant scope. `true` also protects anonymous business calls. See `docs/REDEPLOY_UNRAID.md`.
 - Points do not expire and there are no refunds/reversals in the MVP.
 
 ## Definition of done
 A task is complete when:
 1. The API starts and `/docs` loads with no errors.
 2. New endpoints are tested (happy path + no-match / duplicate cases where relevant).
-3. `docker compose up --build` runs the full stack locally.
+3. `docker compose -f docker-compose.unraid.yml up -d --wait --wait-timeout 600 api admin-web` runs the full stack locally.
 4. No secrets added to git; `.env.example` updated if new variables were introduced.
 
 ## Current focus

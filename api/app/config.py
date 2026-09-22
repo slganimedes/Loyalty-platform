@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     pass_asset_max_pixels: int = 4096 * 4096
 
     # Security
-    auth_enabled: bool = False  # Requested public test mode; enable for tenant-protected use.
+    auth_enabled: bool = False  # Business API only; admin sessions always require credentials.
     pan_hash_secret: str = "change-me-in-env"
     session_hours: int = 12
     bootstrap_admin_username: str = "admin"

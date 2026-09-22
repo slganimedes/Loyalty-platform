@@ -18,7 +18,7 @@ export default function Login() {
     finally { setBusy(false); }
   };
 
-  if (user?.public_access) return <Navigate to="/merchants" replace />;
+  if (user) return <Navigate to="/merchants" replace />;
   return (
     <div className="login-wrap">
       <form className="login-box" onSubmit={submit}>

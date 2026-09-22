@@ -32,7 +32,7 @@ Google/Apple revocation retries. History is retained. The admin uses red Getnet-
 accents, rounded surfaces, accessible focus and responsive navigation.
 Public API documentation is available at `/docs` and linked from the API root
 and admin. See `docs/CAMPAIGN_PASSES.md` and `docs/COMPOSE_DEPLOYMENT.md`
-(paths relative to the repository root). For installation without `.env`, copy
-`docker-compose.install.yml` to a private file and fill in `x-installation`.
-Regenerate that template with `python scripts/render_install_compose.py` after
-changes to the canonical Compose. Do not publish the private settings.
+(paths relative to the repository root). Both Unraid and local Docker use only
+`docker-compose.unraid.yml`. Edit `x-installation` privately in Unraid; locally use
+`.env` for paths, ports and credentials. See the Compose guide for both commands.
+Do not publish private settings.
