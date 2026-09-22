@@ -111,3 +111,26 @@ perfil y espere a API/panel saludables. No se conectó un túnel real.
 El modo `--published` permite repetir esa prueba descargando el SHA fijado desde
 GitHub. La aceptación en Unraid debe comprobar la referencia en los logs de source,
 las conexiones de cloudflared y los dos dominios públicos desde datos móviles.
+
+### Validación de la versión publicada
+
+Código publicado: `b795b88005facab100a69bff759fc8e0b2842bc6`; el commit
+`e9ffe55` fija ese código en el Compose único.
+
+- `python scripts/check_deployment.py --published`: correcto, descargando el código
+  desde GitHub en un proyecto Docker nuevo. Incluye la persistencia tras reiniciar.
+- Configuración Unraid sin `.env`: rutas appdata y puertos loopback 18000/18080
+  correctos; Cloudflare incluido sin perfiles. La imagen real de cloudflared acepta
+  el comando configurado y la variable `TUNNEL_TOKEN`.
+- Arranque local con el mismo archivo y `.env`: correcto; `source` y `web-build`
+  terminan con código 0; API y panel quedan saludables en 8000/8080. Los logs de
+  `source` confirman el SHA publicado anterior.
+- Backup previo verificado:
+  `data/backups/before-unified-compose-20260922T212952Z-aec744fd.db`.
+  Tras arrancar, `integrity_check`, `foreign_key_check` y los recuentos de todas
+  las tablas coinciden con la base anterior.
+- Chromium contra el panel Docker local: health/docs/OpenAPI, login con credenciales
+  existentes, perfil, recarga, logout y bloqueo de navegación sin sesión correctos.
+
+El túnel real no se inició en el PC. La conexión de Cloudflare y los hostnames
+se comprobarán sobre la base de datos y el token de Unraid.
