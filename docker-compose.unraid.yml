@@ -3,7 +3,7 @@
 # Edit only x-installation. No .env required. Do not commit the private copy.
 # For a literal dollar sign in a value, enter $$ (Docker Compose escaping).
 x-installation:
-  SOURCE_REF: &source_ref "7ce4ff5b9b869447762cde4a6b8d7c89fa009c0e"
+  SOURCE_REF: &source_ref "38bcca181f12ec258f885e31961604386f6f7532"
   SOURCE_URL: &source_url ""
   GITHUB_TOKEN: &github_token ""
   PAN_HASH_SECRET: &pan_secret "REPLACE_WITH_STABLE_RANDOM_SECRET"

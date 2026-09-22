@@ -12,6 +12,8 @@ La API también crea un backup SQLite antes de migrar una base antigua con comer
 
 Abrir la [plantilla Unraid actual](https://github.com/slganimedes/Loyalty-platform/blob/main/docker-compose.unraid.yml) o su [contenido Raw](https://raw.githubusercontent.com/slganimedes/Loyalty-platform/main/docker-compose.unraid.yml). En **Edit Stack → Compose File**, sustituir el contenido completo por esa plantilla. El `SOURCE_REF` nuevo ya viene fijado al commit de código de esta entrega.
 
+Referencia de código de esta entrega: `38bcca181f12ec258f885e31961604386f6f7532`. El commit posterior solo fija esta referencia en la plantilla y documenta el despliegue.
+
 Reponer los valores privados dentro de `x-installation`:
 
 | Campo | Qué conservar o configurar |

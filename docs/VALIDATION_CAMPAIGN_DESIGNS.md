@@ -16,7 +16,7 @@ Ejemplo completo generado por el servicio real: [points-pass.json](examples/poin
 | `admin-web` | `npm run test:e2e` | **5 passed**, 28,0 s. API y navegador reales con DB temporal y autenticación activada; se omite la prueba exclusiva del modo público, ejecutada por separado. |
 | `admin-web` | `BROWSER_AUTH_ENABLED=false` y `npx playwright test tests/public-mode.spec.js` | **1 passed**. Entrada sin login, alta con fecha, imágenes, textos, preview y persistencia tras recargar. En PowerShell: `$env:BROWSER_AUTH_ENABLED='false'` antes del comando. |
 | Raíz | `python scripts/export_points_example.py` | JSON generado; pytest compara su contenido con el resultado del builder. |
-| Raíz | `python scripts/render_install_compose.py --unraid-ref <SHA_CODIGO>` | Plantillas regeneradas con la configuración nueva; Unraid fija el commit de código publicado indicado en su `SOURCE_REF`. |
+| Raíz | `python scripts/render_install_compose.py --unraid-ref 38bcca181f12ec258f885e31961604386f6f7532` | Plantillas regeneradas con la configuración nueva; Unraid fija este commit de código. |
 | Raíz | `docker compose config -q` | Compose local válido. |
 | Raíz | `docker compose -f docker-compose.unraid.yml config -q` | Sintaxis/estructura Unraid válidas; no arranca el túnel ni valida credenciales. |
 | Raíz | `docker compose -f docker-compose.install.yml config -q` | Plantilla install válida. |
