@@ -31,10 +31,15 @@ Two tracks run in parallel: **A. Build** (offline with mock data) and **B. Accou
 - PAN hashing (HMAC-SHA256), admin password hashing (bcrypt).
 - Signed Apple passes, APNs/PassKit service and Google Wallet REST integration, gated independently.
 - React admin with authentication and persisted ES/EN, Docker packaging and browser tests.
+- Notifications Center, personalized campaign/pass sends, optional payment messages,
+  durable history/outbox, provider adapters and quotas. See [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ## Definition of done
-`docker compose -f docker-compose.unraid.yml up` runs the stack; `/health` + `/docs` respond; `pytest` green (93 tests);
+`docker compose -f docker-compose.unraid.yml up` runs the stack; `/health` + `/docs` respond; `pytest` green (132 tests);
 admin web does what the API does and switches ES/EN; no secrets in git.
+
+Latest browser validation: 7 authenticated-mode workflows plus 1 public-mode
+workflow passed. Wallet device delivery still requires real provider credentials.
 
 ## Campaign passes and standalone deployment (2026-09-20)
 

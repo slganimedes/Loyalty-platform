@@ -68,6 +68,7 @@ Bootstrapping the MVP: project scaffolding → backend core (models + merchant/c
 - Never push or publish to GitHub unless the user explicitly requests it.
 - Campaign passes, deletion and installation URL/QR behavior: `docs/CAMPAIGN_PASSES.md`.
 - Standalone production Compose with standard images and GitHub source: `docs/COMPOSE_DEPLOYMENT.md`.
+- Notifications, payment opt-in, durable outbox/audit and quotas: `docs/NOTIFICATIONS.md`.
 - Ask before cross-file refactors or adding new dependencies.
 - Prefer small, verifiable steps; show the diff.
 - When unsure about business rules, check `docs/PRD.md` instead of guessing.

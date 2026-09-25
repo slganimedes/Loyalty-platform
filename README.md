@@ -1,5 +1,10 @@
 # SME Loyalty Platform (MVP / Pilot)
 
+Wallet notifications: see [Notifications Center](docs/NOTIFICATIONS.md) for the
+composer, payment opt-in, audit history, API, provider behavior and configuration.
+Upgrading the previous Unraid release requires the new `SOURCE_REF`; see the
+[exact Compose differences and upgrade steps](docs/REDEPLOY_UNRAID.md).
+
 Wallet-based loyalty for Getnet merchants. Customers get an Apple/Google **Wallet pass**
 (no app); **payments** automatically reward them. Single **FastAPI** backend + **SQLite**,
 packaged with **Docker Compose**, deployed on **Unraid** via **Cloudflare Tunnel**
@@ -82,6 +87,9 @@ In **Payments**, choose the merchant and one of its customers, enter the amount
 and select the source. Payment IDs are generated automatically. Each successful
 submission represents a new payment; retrying a failed request with unchanged
 values reuses its ID while the form stays open to prevent duplicate rewards.
+Select **Send notification to customer** to edit a message that is personalized
+with the payment amount, earned points and updated campaign balance after payment.
+The checkbox defaults to unchecked. Track results in **Notifications**.
 
 ## Repo layout
 ```

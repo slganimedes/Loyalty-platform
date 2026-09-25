@@ -11,7 +11,7 @@ from sqlalchemy import inspect, text
 from .campaign_designs import VERSION
 
 
-def backup_before_migration(engine) -> Path | None:
+def backup_before_migration(engine, version: str = VERSION) -> Path | None:
     if (
         engine.dialect.name != "sqlite"
         or not engine.url.database
@@ -25,7 +25,7 @@ def backup_before_migration(engine) -> Path | None:
         if (
             "schema_migration" in tables
             and con.execute(
-                text("SELECT 1 FROM schema_migration WHERE version=:v"), {"v": VERSION}
+                text("SELECT 1 FROM schema_migration WHERE version=:v"), {"v": version}
             ).first()
         ):
             return None
@@ -35,7 +35,7 @@ def backup_before_migration(engine) -> Path | None:
     folder = source.parent / "backups"
     folder.mkdir(exist_ok=True, mode=0o700)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = folder / f"before-{VERSION}-{stamp}-{uuid.uuid4().hex[:8]}.db"
+    target = folder / f"before-{version}-{stamp}-{uuid.uuid4().hex[:8]}.db"
     with target.open("xb"):
         pass
     os.chmod(target, 0o600)

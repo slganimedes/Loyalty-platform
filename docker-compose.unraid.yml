@@ -21,6 +21,11 @@ x-installation:
   AUTH_ENABLED: &auth_enabled "${AUTH_ENABLED:-false}"
   PASS_ASSET_MAX_BYTES: &asset_max_bytes "${PASS_ASSET_MAX_BYTES:-4194304}"
   PASS_ASSET_MAX_PIXELS: &asset_max_pixels "${PASS_ASSET_MAX_PIXELS:-16777216}"
+  NOTIFICATION_MASS_THRESHOLD: &notification_mass "${NOTIFICATION_MASS_THRESHOLD:-100}"
+  NOTIFICATION_MAX_PASSES: &notification_max "${NOTIFICATION_MAX_PASSES:-5000}"
+  NOTIFICATION_SENDS_PER_HOUR: &notification_sends "${NOTIFICATION_SENDS_PER_HOUR:-30}"
+  NOTIFICATION_PASSES_PER_HOUR: &notification_hourly "${NOTIFICATION_PASSES_PER_HOUR:-10000}"
+  NOTIFICATION_PASSES_PER_DAY: &notification_daily "${NOTIFICATION_PASSES_PER_DAY:-3}"
   CLOUDFLARE_TUNNEL_TOKEN: &tunnel_token "${CLOUDFLARE_TUNNEL_TOKEN:-}"
   DATA_MOUNT: &data_mount "${DATA_DIR:-/mnt/user/appdata/loyalty-platform/data}:/data"
   CERTS_MOUNT: &certs_mount "${CERTS_DIR:-/mnt/user/appdata/loyalty-platform/data/certs}:/certs:ro"
@@ -122,6 +127,11 @@ services:
       SESSION_HOURS: *session_hours
       PASS_ASSET_MAX_BYTES: *asset_max_bytes
       PASS_ASSET_MAX_PIXELS: *asset_max_pixels
+      NOTIFICATION_MASS_THRESHOLD: *notification_mass
+      NOTIFICATION_MAX_PASSES: *notification_max
+      NOTIFICATION_SENDS_PER_HOUR: *notification_sends
+      NOTIFICATION_PASSES_PER_HOUR: *notification_hourly
+      NOTIFICATION_PASSES_PER_DAY: *notification_daily
     depends_on:
       source:
         condition: service_completed_successfully

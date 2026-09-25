@@ -19,6 +19,7 @@ from .routers import (
     campaigns,
     customers,
     merchants,
+    notifications,
     settings_wallet,
     transactions,
     wallet_passes,
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     )
                 )
                 db.commit()
+    from .services.notifications import dispatch_pending
     from .services.passes import maintenance
 
     stop = asyncio.Event()
@@ -57,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while not stop.is_set():
             try:
                 await asyncio.to_thread(maintenance)
+                await asyncio.to_thread(dispatch_pending)
             except Exception as exc:
                 logging.getLogger("passes").warning(
                     "Revocation retry failed: %s", type(exc).__name__
@@ -105,6 +108,7 @@ app.include_router(merchants.router)
 app.include_router(customers.router)
 app.include_router(assignments.router)
 app.include_router(transactions.router)
+app.include_router(notifications.router)
 app.include_router(settings_wallet.router)
 app.include_router(auth.router)
 app.include_router(wallet_passes.router)

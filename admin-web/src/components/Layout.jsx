@@ -24,6 +24,7 @@ export default function Layout() {
     ["/passes", "passes"],
     ["/coupons", "nav_coupons"],
     ["/transactions", "transactions"],
+    ["/notifications", "notifications"],
     ...(user?.role === "super_admin" ? [["/wallet", "nav_wallet"]] : []),
   ];
 

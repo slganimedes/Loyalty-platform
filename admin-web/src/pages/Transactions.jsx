@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MerchantPicker from "../components/MerchantPicker";
+import NotificationFields from "../components/NotificationFields";
 import { useApp } from "../context/AppContext";
 import { api } from "../api/client";
 
@@ -13,6 +14,8 @@ function PaymentForm({ merchantId }) {
   const [result, setResult] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sendNotification, setSendNotification] = useState(false);
+  const [notification, setNotification] = useState(null);
   const submitting = useRef(false);
   const pending = useRef(null);
 
@@ -32,7 +35,8 @@ function PaymentForm({ merchantId }) {
     submitting.current = true;
     setBusy(true); setErr(""); setResult(null);
     const payload = { merchant_id: merchantId, source, amount,
-      identifiers: { customer_number: customer.customer_code } };
+      identifiers: { customer_number: customer.customer_code },
+      ...(sendNotification ? { send_notification: true, notification } : {}) };
     const fingerprint = JSON.stringify(payload);
     // Retry a lost response with the same ID; start a new ID after success.
     if (pending.current?.fingerprint !== fingerprint) {
@@ -66,9 +70,15 @@ function PaymentForm({ merchantId }) {
       </div>
     </div>
     {!loading && !customers.length && !err && <p className="note">{t("noCustomersForPayment")}</p>}
+    <label className="toggle payment-notification-toggle"><input type="checkbox" checked={sendNotification} disabled={busy} onChange={e => {
+      setSendNotification(e.target.checked);
+      if (!notification) setNotification({ title: t("purchaseRegistered"), message: t("paymentNotificationMessage"), type: "points_earned" });
+    }} aria-controls="payment-notification-panel" aria-expanded={sendNotification} />{t("sendPaymentNotification")}</label>
+    {sendNotification && notification && <div id="payment-notification-panel" className="payment-notification-panel"><NotificationFields value={notification} onChange={setNotification} payment disabled={busy} /></div>}
     <div className="btns"><button disabled={busy || loading || !customerId}>{t("submitPayment")}</button></div>
     {err && <p role="alert" className="error">{err}</p>}
     {result && <p role="status">{t(result.status)} / {t("points")}: {result.points_delta}{result.new_balance !== null && ` / ${t("balance")}: ${result.new_balance}`}</p>}
+    {result?.notification_id && <p className="note">{t("paymentNotificationQueued")} <a href="/notifications">{t("notifications")}</a></p>}
   </form>;
 }
 

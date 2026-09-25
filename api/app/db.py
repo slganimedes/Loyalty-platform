@@ -36,8 +36,9 @@ def init_db() -> None:
     """Create all tables. Imports models so they register on Base.metadata."""
     from . import models  # noqa: F401  (ensures models are imported)
     from .migrations.backup import backup_before_migration
+    from .migrations.notifications import VERSION as NOTIFICATIONS_VERSION
 
-    backup_before_migration(engine)
+    backup_before_migration(engine, version=NOTIFICATIONS_VERSION)
     Base.metadata.create_all(bind=engine)
     # Additive migrations preserve pilot data created by the original scaffold.
     additions = {
@@ -81,6 +82,9 @@ def init_db() -> None:
     from .migrations.campaign_designs import migrate
 
     migrate(engine)
+    from .migrations.notifications import migrate as migrate_notifications
+
+    migrate_notifications(engine)
 
 
 def _migrate_campaign_passes() -> None:

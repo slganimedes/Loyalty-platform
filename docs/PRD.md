@@ -45,6 +45,8 @@ Admin auth is mandatory: username + password and real sessions regardless of `AU
 - Matching priority: card_hash → customer_number → email → dni (scoped to merchant).
 - No match → stored as `unmatched`, no accrual.
 - On accrual → update pass in real time.
+- Optional `send_notification` (default false) with editable content records an outbox
+  entry in the same transaction; a repeated payment cannot duplicate its notification.
 
 ## 7. Passes
 Passes belong to campaigns and are explicitly assigned to customers of the same merchant.
@@ -63,9 +65,17 @@ as `joined_on` during registration. The pass shows three month letters and year:
 `ene 2020`, `sep 2026` (`Jan 2020`, `Sep 2026` in English). Enrollment timestamps remain separate.
 Real-time update (Apple APNs + web service; Google API patch).
 
+The **Notifications** menu sends personalized messages to campaign pass holders or
+one pass. Includes search, shared ES/EN composer, placeholders, approximate Apple/
+Google previews, confirmation, filtered history, user audit and configurable quotas.
+Provider acceptance is distinguished from device delivery. Failed/uncertain provider
+calls never reverse payments; unattempted deliveries survive restarts. See
+[NOTIFICATIONS.md](NOTIFICATIONS.md) for contracts and provider limits.
+
 ## 8. Data model (SQLite)
 merchant, admin_user, wallet_config, customer, pass, campaign, coupon, transaction, movement,
-campaign_enrollment, pass_design, pass_asset, schema_migration.
+campaign_enrollment, pass_design, pass_asset, schema_migration,
+notification, notification_delivery, pass_notification_state.
 See `api/app/models/__init__.py` for the authoritative schema.
 
 ## 9. API (base /api/v1)
@@ -76,12 +86,16 @@ See `api/app/models/__init__.py` for the authoritative schema.
 - POST /transactions
 - GET/PUT /settings/wallet[/apple|/google]
 - POST /auth/login, PATCH /users/me {language}
+- GET /merchants/{id}/notification-campaigns, /notification-passes
+- POST /merchants/{id}/notifications/preview ; POST/GET /merchants/{id}/notifications
+- GET /merchants/{id}/notifications/{notification_id}
 
 ## 10. Security posture (MVP)
 - PAN hash only (HMAC-SHA256 keyed by PAN_HASH_SECRET) — validate with bank before prod.
 - API test mode (`AUTH_ENABLED=false`) permits anonymous business/Apple requests. The admin panel always requires credentials, and profile/logout always require a session. The panel login does not prevent direct anonymous API access in this mode. `true` also requires Bearer/ApplePass authentication for business requests.
 - Admin passwords hashed (bcrypt/argon2). TLS everywhere (Cloudflare edge).
-- Pre-production: add API-key/mTLS to ingestion; full GDPR; audit logging.
+- Every notification is audited with sender, timestamp, content, recipients and outcome.
+- Pre-production: add API-key/mTLS to ingestion; full GDPR; audit of remaining operations.
 
 ## 11. Deployment
 Unraid (Docker Compose Manager) + Cloudflare Tunnel. Public hostnames:

@@ -18,6 +18,12 @@ async function request(path, { method = "GET", body, raw = false } = {}) {
 }
 
 export const api = {
+  notificationCampaigns: mid => request(`/merchants/${mid}/notification-campaigns`),
+  notificationPasses: (mid, q) => request(`/merchants/${mid}/notification-passes?${new URLSearchParams({q})}`),
+  previewNotification: (mid, body) => request(`/merchants/${mid}/notifications/preview`, {method: "POST", body}),
+  sendNotification: (mid, body) => request(`/merchants/${mid}/notifications`, {method: "POST", body}),
+  notificationHistory: (mid, filters) => request(`/merchants/${mid}/notifications?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== ""))}`),
+  notificationDetail: (mid, id) => request(`/merchants/${mid}/notifications/${id}`),
   campaign: (id) => request(`/campaigns/${id}`),
   updateCampaign: (id, body) => request(`/campaigns/${id}`, {method: "PUT", body}),
   archiveCampaign: (id) => request(`/campaigns/${id}/archive`, {method: "POST"}),

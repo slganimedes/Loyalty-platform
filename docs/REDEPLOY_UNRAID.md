@@ -1,6 +1,35 @@
 # Redesplegar en Unraid conservando los datos
 
-Esta versión incorpora el diseñador de campañas, inscripciones explícitas, imágenes persistentes y fecha de alta del cliente. **La web de administración siempre exige usuario y contraseña.** Con `AUTH_ENABLED=false` la API de negocio permite llamadas anónimas, incluidos borrados; el login del panel no protege esas llamadas directas. Con `true` también se exige autenticación en la API de negocio.
+Esta versión incorpora **Notificaciones** para campañas o pases individuales, historial de envíos, plantillas y avisos opcionales al registrar pagos. Conserva el diseñador de campañas y las inscripciones existentes. **La web de administración siempre exige usuario y contraseña.** Con `AUTH_ENABLED=false` la API de negocio permite llamadas anónimas, incluidos envíos y borrados; el login del panel no protege esas llamadas directas. Con `true` también se exige autenticación en la API de negocio.
+
+## Cambios respecto a la versión anterior (`b795b88005facab100a69bff759fc8e0b2842bc6`)
+
+El archivo que se edita en Unraid es **Compose File**, correspondiente a
+`docker-compose.unraid.yml`. El cambio mínimo obligatorio es actualizar `SOURCE_REF`
+al SHA de la plantilla publicada. Si se mantienen los límites predeterminados,
+el Compose anterior funciona cambiando únicamente esa referencia.
+
+La plantilla completa añade estos ajustes en `x-installation` y los pasa a
+`services.api.environment`. Son opcionales para personalizar los límites:
+
+| Variable nueva | Valor predeterminado | Función |
+| --- | --- | --- |
+| `NOTIFICATION_MASS_THRESHOLD` | `100` | Confirmación adicional por encima de 100 titulares. |
+| `NOTIFICATION_MAX_PASSES` | `5000` | Máximo de pases en un envío por campaña. |
+| `NOTIFICATION_SENDS_PER_HOUR` | `30` | Máximo de solicitudes por comercio y hora. |
+| `NOTIFICATION_PASSES_PER_HOUR` | `10000` | Máximo de pases afectados por comercio y hora. |
+| `NOTIFICATION_PASSES_PER_DAY` | `3` | Límite por pase en 24 horas; admite valores de 1 a 3. |
+
+Conservar los montajes, puertos, dominios, secreto PAN, credenciales y token de
+Cloudflare de la instalación. No hay imágenes, servicios, volúmenes ni dependencias
+adicionales. La cola se guarda en SQLite y la procesa la API existente.
+
+La migración `20260925_notifications` crea automáticamente tres tablas de
+notificaciones. Los saldos, clientes, campañas y pases existentes se conservan.
+En una base con datos se crea un backup en
+`/data/backups/before-20260925_notifications-*.db`. Detener el stack y hacer además
+la copia completa indicada a continuación. Detalles funcionales y del proveedor:
+[NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ## 1. Guardar la configuración y hacer un backup
 
@@ -12,7 +41,7 @@ La API también crea un backup SQLite antes de migrar una base antigua con comer
 
 Abrir la [plantilla Unraid actual](https://github.com/slganimedes/Loyalty-platform/blob/main/docker-compose.unraid.yml) o su [contenido Raw](https://raw.githubusercontent.com/slganimedes/Loyalty-platform/main/docker-compose.unraid.yml). En **Edit Stack → Compose File**, sustituir el contenido completo por esa plantilla. Es el único Compose, también utilizado en local. El `SOURCE_REF` nuevo ya viene fijado al commit de código de esta entrega; Cloudflare arranca automáticamente sin perfiles.
 
-El `SOURCE_REF` debe ser el de la plantilla actualizada con esta corrección; la versión anterior `38bcca1` abría también el panel. No reutilizar esa referencia para un despliegue con login administrativo.
+El `SOURCE_REF` debe ser el de la plantilla actualizada con Notificaciones. Si **Env File** define `SOURCE_REF`, actualizarlo también o eliminar esa línea para usar el valor de Compose File. La versión muy antigua `38bcca1` abría también el panel y no debe reutilizarse para un despliegue con login administrativo.
 
 Reponer los valores privados dentro de `x-installation`:
 
@@ -28,6 +57,7 @@ Reponer los valores privados dentro de `x-installation`:
 | Configuración `APPLE_*` | Conservar la configuración actual si se utiliza Apple Wallet. |
 | `DATA_MOUNT`, `CERTS_MOUNT` | Conservar las rutas existentes. El JSON debe seguir en `data/certs/google-sa.json`, visible en la API como `/certs/google-sa.json`. |
 | `PASS_ASSET_MAX_BYTES`, `PASS_ASSET_MAX_PIXELS` | Los valores de plantilla permiten 4 MiB y 16.777.216 píxeles por imagen. |
+| `NOTIFICATION_*` | Dejar los cinco valores predeterminados o ajustar los límites de la tabla anterior. |
 | `SOURCE_URL`, `GITHUB_TOKEN` | Vacíos para descargar del repositorio público. |
 
 El resto de ajustes puede conservarse. Los valores con un dólar literal deben escribir `$$`, por la interpolación de Compose. No pegar el JSON privado en el YAML ni subir esta copia con credenciales a GitHub.
@@ -66,11 +96,13 @@ de Cloudflare siguen siendo `api:8000` y `admin-web:80`.
 Con los dominios configurados en la plantilla:
 
 - Panel: `https://admin.slmartinez.org`. Debe solicitar usuario y contraseña y mostrar el botón de cerrar sesión tras entrar.
-- Swagger: `https://api.slmartinez.org/docs`. Debe permitir ejecutar operaciones de negocio sin introducir credenciales.
+- Swagger: `https://api.slmartinez.org/docs`. Con `AUTH_ENABLED=false`, permite ejecutar operaciones de negocio sin credenciales; con `true`, requiere una sesión.
 - Sin token, `/api/v1/users/me` debe devolver 401; `/api/v1/merchants` debe responder 200 con la API abierta. Con una sesión válida, `/users/me` devuelve el administrador real y `public_access: false`.
 - En Campañas → Nueva campaña aparecen las cuatro secciones, subidas de logo y hero, color, descripciones, etiquetas y preview. Si aparece la interfaz antigua, recargar con `Ctrl+F5` y comprobar el SHA efectivo del stack.
 - Al crear un cliente se puede indicar su fecha de alta. El pase usa el mes abreviado y año de esa fecha; por ejemplo, `2023-07-10` produce `jul 2023` en español.
 - Las campañas migradas que indiquen revisión de diseño deben abrirse, completar sus imágenes y guardarse. Los pases existentes conservan su familia Google; los nuevos de campañas de puntos completadas usan GenericObject.
+- Debe aparecer **Notificaciones** en el menú, con selección de campaña/pase, plantillas, dos vistas previas e historial. En **Pagos**, la casilla **Enviar notificación al cliente** aparece desmarcada.
+- Probar primero un pase individual instalado. Revisar el detalle del historial: «Aceptada por Wallet» indica aceptación del proveedor, no confirma que el cliente haya visto el aviso. Los pases Apple antiguos pueden necesitar una actualización previa para incorporar el campo de notificación.
 
 Comprobar que `source` muestra el SHA nuevo y cloudflared registra conexiones. Para comprobar el conector desde la red interna, usar el comando de `/ready` en [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md#validación-y-versión-instalada).
 

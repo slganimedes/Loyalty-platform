@@ -235,6 +235,53 @@ class AdminSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class Notification(Base):
+    """Immutable audience/content snapshot and durable notification outbox."""
+
+    __tablename__ = "notification"
+    __table_args__ = (UniqueConstraint("merchant_id", "request_id"),)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    merchant_id: Mapped[str] = mapped_column(ForeignKey("merchant.id"), index=True)
+    request_id: Mapped[str] = mapped_column(String)
+    request_hash: Mapped[str] = mapped_column(String)
+    sender_id: Mapped[str | None] = mapped_column(ForeignKey("admin_user.id"), nullable=True)
+    sender_name: Mapped[str] = mapped_column(String)
+    target_type: Mapped[str] = mapped_column(String)
+    campaign_id: Mapped[str | None] = mapped_column(ForeignKey("campaign.id"), nullable=True)
+    campaign_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    pass_id: Mapped[str | None] = mapped_column(ForeignKey("pass.id"), nullable=True)
+    transaction_id: Mapped[str | None] = mapped_column(ForeignKey("transaction.id"), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    estimated_recipients: Mapped[int] = mapped_column(Integer)
+    pass_count: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String, default="queued", index=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_delivery"
+    __table_args__ = (UniqueConstraint("notification_id", "pass_id"),)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    notification_id: Mapped[str] = mapped_column(ForeignKey("notification.id"), index=True)
+    pass_id: Mapped[str] = mapped_column(ForeignKey("pass.id"), index=True)
+    platform: Mapped[str] = mapped_column(String)
+    payload: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String, default="pending", index=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PassNotificationState(Base):
+    """Latest Apple back-of-pass message, retained across ordinary balance updates."""
+
+    __tablename__ = "pass_notification_state"
+    pass_id: Mapped[str] = mapped_column(ForeignKey("pass.id"), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 class DeviceRegistration(Base):
     __tablename__ = "device_registration"
     __table_args__ = (UniqueConstraint("device_id", "pass_id"),)

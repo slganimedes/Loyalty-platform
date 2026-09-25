@@ -245,6 +245,7 @@ def _png(color: str, size: int) -> bytes:
 
 
 def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, config: dict) -> bytes:
+    from .notification_providers import apple_message_fields
     from .points_pass import format_customer_since
 
     base = public_https_url(config["webservice_url"])
@@ -312,6 +313,7 @@ def apple_bundle(db: Session, customer: models.Customer, row: models.Pass, confi
             ],
         },
     }
+    payload["storeCard"]["backFields"].extend(apple_message_fields(db, row))
     files = {
         "pass.json": json.dumps(payload, ensure_ascii=False).encode(),
         "icon.png": _png(merchant.pass_color, 29),

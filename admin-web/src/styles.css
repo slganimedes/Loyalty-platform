@@ -6,6 +6,30 @@
   --cream: #f5f5f7;
   --line: #e9e9ee;
 }
+
+.notification-target-options, .notification-summary, .placeholder-buttons { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.notification-target-options input, .payment-notification-toggle input, .notification-dialog input[type="checkbox"] { width: auto; flex: none; }
+.notification-summary { margin-top: 16px; padding: 12px; border-radius: 8px; background: var(--cream); font-size: 13px; }
+.notification-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.notification-fields textarea { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; }
+.notification-fields textarea:focus-visible { outline: 3px solid #236bba; outline-offset: 2px; }
+.notification-previews { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wallet-notification { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: #f3f3f6; overflow-wrap: anywhere; }
+.wallet-notification-1 { border-radius: 12px; background: #eef4fa; }
+.wallet-notification-provider { color: var(--grey); font-size: 12px; font-weight: 600; }
+.wallet-notification h3 { margin: 12px 0 8px; font-size: 16px; }
+.notification-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.notification-warning { padding: 12px; background: #fff6dc; color: #704e00; border-radius: 8px; font-size: 13px; }
+.notification-dialog { border: 1px solid var(--line); border-radius: 16px; width: min(560px, calc(100% - 32px)); padding: 24px; max-height: 85vh; overflow-y: auto; overflow-wrap: anywhere; }
+.notification-dialog::backdrop { background: #20202788; }
+.notification-dialog details { margin: 12px 0; }
+.notification-table { overflow-x: auto; margin-top: 16px; }
+.notification-table table { min-width: 680px; }
+.notification-success { background: #e9f6ec; color: #226c3c; }
+.notification-failed, .notification-unknown { background: #f6e4e1; color: #a10f18; }
+.payment-notification-toggle { margin-top: 18px; }
+.payment-notification-panel { margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+@media (max-width: 600px) { .notification-previews { grid-template-columns: 1fr; } .notification-dialog { padding: 18px; } }
 * { box-sizing: border-box; }
 body {
   margin: 0;

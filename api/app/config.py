@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,12 @@ class Settings(BaseSettings):
 
     pass_asset_max_bytes: int = 4 * 1024 * 1024
     pass_asset_max_pixels: int = 4096 * 4096
+
+    notification_mass_threshold: int = Field(default=100, ge=1)
+    notification_max_passes: int = Field(default=5000, ge=1)
+    notification_sends_per_hour: int = Field(default=30, ge=1)
+    notification_passes_per_hour: int = Field(default=10000, ge=1)
+    notification_passes_per_day: int = Field(default=3, ge=1, le=3)
 
     # Security
     auth_enabled: bool = False  # Business API only; admin sessions always require credentials.

@@ -155,7 +155,7 @@ def main() -> None:
                 check=True,
             )
             base = f"http://127.0.0.1:{admin_port}"
-            for route in ["/health", "/passes", "/campaigns", "/docs", "/redoc"]:
+            for route in ["/health", "/passes", "/campaigns", "/notifications", "/docs", "/redoc"]:
                 with urllib.request.urlopen(base + route, timeout=15) as response:
                     assert response.status == 200
             with urllib.request.urlopen(base + "/openapi.json", timeout=15) as response:
@@ -248,9 +248,27 @@ def main() -> None:
                     "external_transaction_id": "deployment-payment",
                     "amount": 20,
                     "identifiers": {"customer_number": "DEPLOY-1"},
+                    "send_notification": True,
+                    "notification": {
+                        "title": "Purchase registered",
+                        "message": "Amount {{amount}}, points {{currentPoints}}",
+                    },
                 },
             )
             assert payment["points_delta"] == 2
+            notification_id = payment["notification_id"]
+            assert notification_id and payment["notification_status"] == "skipped"
+            notification_base = f"/merchants/{merchant['id']}/notifications"
+            history = api_call(notification_base)
+            assert history["total"] == 1
+            assert history["items"][0]["reason"] == "no_passes"
+            preview = api_call(
+                notification_base + "/preview",
+                {"target_type": "campaign", "campaign_id": campaign["id"],
+                 "title": "Rewards", "message": "Your balance: {{currentPoints}}"},
+            )
+            assert preview["estimated_recipients"] == 0
+            assert "no_passes" in preview["warnings"]
             subprocess.run(
                 command + ["restart", "api"], env=environment, cwd=root, check=True
             )
@@ -268,6 +286,10 @@ def main() -> None:
                     time.sleep(0.5)
             saved = api_call(f"/campaigns/{campaign['id']}")
             assert saved["design"]["background_color"] == "#123456"
+            notification = api_call(notification_base + "/" + notification_id)
+            assert notification["status"] == "skipped"
+            assert notification["sender_name"] == "public-test"
+            assert notification["title"] == "Purchase registered"
             assert (
                 api_call(f"/customers/{customer['customer']['id']}/campaigns")[0][
                     "points_balance"
@@ -289,7 +311,7 @@ def main() -> None:
             with urllib.request.urlopen(request, timeout=15) as response:
                 assert response.status == 200
             print(
-                "Single Compose passed: source, dependency install, web build, health, authentication, design/image uploads, enrollment, payment and persistence after API restart. Cloudflare is configured for default startup; real tunnel connection is checked on Unraid."
+                "Single Compose passed: source, dependency install, web build, health, authentication, design/image uploads, enrollment, payment, notification preview/audit and persistence after API restart. Cloudflare is configured for default startup; real tunnel connection is checked on Unraid."
             )
         finally:
             # Only the unique test project and its named volumes are removed.

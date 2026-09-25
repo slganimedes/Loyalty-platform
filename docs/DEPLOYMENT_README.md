@@ -4,6 +4,13 @@ For deployment from a standalone Compose file with standard images and source fr
 GitHub, use [COMPOSE_DEPLOYMENT.md](COMPOSE_DEPLOYMENT.md). Both Unraid and local
 Docker use `docker-compose.unraid.yml` and download its pinned application release.
 
+The notifications release adds a Notifications menu and optional payment messages,
+with durable audit/outbox tables and configurable quotas. Upgrade differences from
+`b795b88005facab100a69bff759fc8e0b2842bc6` are in [REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md).
+The minimum Compose change is the new `SOURCE_REF`; the `NOTIFICATION_*` settings
+are optional when using default limits. See [NOTIFICATIONS.md](NOTIFICATIONS.md)
+for schema, API, provider mappings and device acceptance checks.
+
 ## Local Docker stack
 
 Requirements: Python 3.12 for setup; a running Docker engine with Compose v2.
@@ -82,7 +89,7 @@ npm audit
 Playwright starts its own API and Vite servers on ports 8015/5175 with a fresh
 temporary SQLite database and synthetic test credentials. It exercises real HTTP
 login, merchant editing, enrollment, campaigns, coupons, payment accrual,
-idempotency, movements, wallet settings and persisted ES/EN language.
+idempotency, movements, wallet settings, notifications, payment opt-in and persisted ES/EN language.
 
 ## Wallet setup
 
@@ -193,8 +200,18 @@ Follow [the Unraid redeployment steps](REDEPLOY_UNRAID.md) to install the publis
   redemption, cash change, refund or reversal. Accrual uses the submitted amount.
 - Coupon and stamp/reward events, as well as every points change, have movements.
 
-Run the Compose API with one Uvicorn worker. Wallet writes are ordered per customer
-in that worker; multi-worker outbound delivery needs a shared delivery queue.
+Run the Compose API with one Uvicorn worker. Ordinary wallet writes remain ordered
+per customer in that worker. Notification outbox claims are durable in SQLite,
+but this does not make all existing wallet operations safe for multiple workers.
+
+## Notifications release validation (2026-09-25)
+
+Recorded: **132 backend tests**, **7 authenticated-mode browser workflows**, and
+**1 public-mode browser workflow** passed. Production Vite build, Ruff and isolated
+working-tree Compose deployment passed, including API restart and persistence.
+Provider tests use synthetic certificates and mocked transports. Physical device
+notification acceptance with real credentials remains an external check.
+The dated sections below record older releases, not current test totals.
 
 SQLite schema upgrades are additive at startup and preserve original scaffold
 rows. Back up `data/loyalty.db` before upgrading. Legacy interaction movements

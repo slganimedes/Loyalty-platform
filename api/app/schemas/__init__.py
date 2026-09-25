@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..services.logos import decode_logo
+from .notifications import NotificationContent
 
 
 # ---------- Merchant ----------
@@ -236,6 +237,14 @@ class TransactionIn(BaseModel):
     source: Literal["getnet", "ecommerce", "other"] = "other"  # getnet / ecommerce / other
     amount: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     identifiers: TransactionIdentifiers = Field(default_factory=TransactionIdentifiers)
+    send_notification: bool = False
+    notification: NotificationContent | None = None
+
+    @model_validator(mode="after")
+    def notification_required(self) -> "TransactionIn":
+        if self.send_notification and not self.notification:
+            raise ValueError("Notification title and message are required when sending")
+        return self
 
 
 class TransactionResult(BaseModel):
@@ -244,3 +253,5 @@ class TransactionResult(BaseModel):
     points_delta: int = 0
     new_balance: int | None = None
     pass_updated: bool = False
+    notification_id: str | None = None
+    notification_status: str | None = None

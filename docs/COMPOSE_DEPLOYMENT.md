@@ -10,6 +10,12 @@ Servicios: `source` descarga el código; `web-build` compila el panel; `api` y
 **Cloudflare forma parte del arranque normal, sin perfiles opcionales.**
 La primera instalación puede tardar varios minutos.
 
+La entrega de Notificaciones mantiene los mismos servicios e imágenes. Desde
+`b795b88005facab100a69bff759fc8e0b2842bc6`, el cambio mínimo es el nuevo `SOURCE_REF`.
+Los cinco ajustes `NOTIFICATION_*` de la plantilla son opcionales; sin ellos se
+aplican los valores predeterminados de la API. Ver [cambios para Unraid](REDEPLOY_UNRAID.md)
+y [límites, migración y API de notificaciones](NOTIFICATIONS.md).
+
 ## Unraid: los cuatro botones del editor
 
 1. Abrir **Edit Stack → Compose File** y pegar el archivo completo de esta versión.
@@ -38,6 +44,7 @@ Configuración principal:
 | `GOOGLE_ISSUER_ID`, `APPLE_*` | Conservar los valores del proveedor. |
 | `GITHUB_TOKEN` | Vacío para el repositorio público; token de lectura para un repositorio privado. |
 | `SOURCE_URL` | Vacío para descargar el commit desde GitHub. Solo se usa en pruebas de fuentes alternativas. |
+| `NOTIFICATION_*` | Límites de audiencia y frecuencia; conservar los predeterminados o configurar los cinco ajustes documentados. |
 | `API_PORT/ADMIN_PORT` | Puertos completos de diagnóstico; por defecto `127.0.0.1:18000:8000` y `127.0.0.1:18080:80`. |
 
 Los puertos publicados se enlazan exclusivamente a loopback; Cloudflare usa la red
@@ -90,7 +97,7 @@ La primera prueba empaqueta el árbol de trabajo; la segunda descarga desde GitH
 el SHA fijado en el mismo Compose. Ambas usan datos y credenciales sintéticos,
 puertos libres y recursos temporales. Comprueban el túnel en la configuración,
 arrancan API/panel y verifican login, perfil, imágenes, campañas, inscripciones,
-pagos y persistencia después de reiniciar. No conectan un túnel real.
+pagos, notificaciones e historial persistente después de reiniciar. No conectan un túnel real.
 
 `source` y `web-build` deben acabar como **Exited (0)**, `api` y `admin-web` como
 **healthy**, y `cloudflared` permanecer en ejecución con conexiones registradas.

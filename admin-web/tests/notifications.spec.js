@@ -1,0 +1,107 @@
+import { test, expect } from "@playwright/test";
+import { createCampaign } from "./campaign-fixtures";
+
+async function setup(page, request) {
+  const login = await request.post("/api/v1/auth/login", {data: {username: "browser-admin", password: "browser-test-password"}});
+  const {access_token: token} = await login.json();
+  const headers = {Authorization: `Bearer ${token}`};
+  await request.patch("/api/v1/users/me", {headers, data: {language: "en"}});
+  const merchant = await (await request.post("/api/v1/merchants", {headers, data: {name: `Notification cafe ${Date.now()}`}})).json();
+  const customer = await (await request.post(`/api/v1/merchants/${merchant.id}/customers`, {headers, data: {customer_code: "NOTIFY-1", name: "Alex Example", email: "alex@example.com"}})).json();
+  const campaign = await createCampaign(request, merchant.id, headers, {name: "Coffee Lovers Rewards", type: "points_per_spend", config: {points: 1, amount_unit: 1}});
+  const empty = await createCampaign(request, merchant.id, headers, {name: "Empty campaign", type: "points_per_spend", config: {}});
+  // Synthetic credentials deliberately cannot deliver to any real device.
+  await request.put("/api/v1/settings/wallet/apple", {headers, data: {enabled: true, config: {team_id: "BROWSER", cert_path: "/nonexistent/browser-test.p12"}}});
+  const assignment = await request.post(`/api/v1/customers/${customer.customer.id}/passes`, {headers, data: {campaign_id: campaign.id, platform: "apple"}});
+  expect(assignment.ok()).toBe(true);
+  const pass = (await assignment.json()).pass;
+  await request.put("/api/v1/settings/wallet/apple", {headers, data: {enabled: false}});
+  await page.addInitScript(token => sessionStorage.setItem("token", token), token);
+  await page.goto("/notifications");
+  await page.getByLabel("Merchant", {exact: true}).selectOption(merchant.id);
+  return {merchant, campaign, empty, customer: customer.customer, pass, headers};
+}
+
+test("notification composer, previews, confirmation, searchable passes, history and payment opt-in", async ({ page, request }) => {
+  const errors = [];
+  page.on("pageerror", e => errors.push(e.message));
+  const data = await setup(page, request);
+  await page.getByRole("combobox", {name: "Campaign", exact: true}).first().selectOption(data.empty.id);
+  await expect(page.getByText("This campaign has no active passes.").first()).toBeVisible();
+  await expect(page.getByRole("button", {name: "Send Notification", exact: true})).toBeDisabled();
+  await page.getByRole("combobox", {name: "Campaign", exact: true}).first().selectOption(data.campaign.id);
+  await expect(page.getByLabel("Notification title", {exact: true})).toHaveValue("Coffee Lovers Rewards");
+  await expect(page.getByRole("article", {name: "Apple Wallet"})).toContainText("Alex Example");
+  await expect(page.getByRole("article", {name: "Google Wallet"})).toContainText("0 points");
+  await page.getByLabel("Link (optional)").fill("https://example.com/rewards");
+  await page.getByLabel("Additional preview text (optional)").fill("See you soon");
+  await expect(page.getByRole("article", {name: "Apple Wallet"})).toContainText("See you soon");
+  await page.screenshot({path: "test-results/notifications-desktop.png", fullPage: true});
+  await page.getByLabel("Notification message", {exact: true}).fill("x".repeat(250));
+  await expect(page.getByText("For easy reading", {exact: false})).toBeVisible();
+  await page.getByRole("button", {name: "Use suggested message"}).click();
+  await page.getByRole("button", {name: "Send Notification", exact: true}).click();
+  await expect(page.getByRole("dialog")).toContainText("1 pass holders");
+  await page.getByRole("button", {name: "Cancel", exact: true}).click();
+  expect((await (await request.get(`/api/v1/merchants/${data.merchant.id}/notifications`, {headers: data.headers})).json()).total).toBe(0);
+  await page.getByRole("button", {name: "Send Notification", exact: true}).click();
+  await page.getByRole("dialog").getByRole("button", {name: "Send Notification", exact: true}).click();
+  await expect(page.getByRole("status")).toContainText("Notification recorded");
+  await expect(page.getByRole("cell", {name: "Not sent", exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Coffee Lovers Rewards", exact: true}).click();
+  await expect(page.getByRole("dialog")).toContainText("Not sent: 1");
+  await page.getByRole("dialog").locator("summary").click();
+  await expect(page.getByRole("dialog")).toContainText("Wallet is not enabled");
+  await page.getByRole("button", {name: "Close", exact: true}).click();
+  await page.getByRole("radio", {name: "Individual pass"}).check();
+  await page.getByLabel("Search by name", {exact: false}).fill("alex@example.com");
+  await page.getByRole("combobox", {name: "Individual pass", exact: true}).selectOption(data.pass.id);
+  await expect(page.locator(".notification-summary")).toContainText("Alex Example");
+  await page.getByLabel("Notification message", {exact: true}).fill("Hello ");
+  await page.getByRole("button", {name: "Customer name", exact: true}).click();
+  await expect(page.getByLabel("Notification message", {exact: true})).toHaveValue("Hello {{customerName}}");
+  await expect(page.getByRole("article", {name: "Apple Wallet"})).toContainText("Hello Alex Example");
+  await page.setViewportSize({width: 390, height: 844});
+  await page.screenshot({path: "test-results/notifications-mobile.png", fullPage: true});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("link", {name: "Payments", exact: true}).click();
+  await expect(page.getByLabel("Send notification to customer")).not.toBeChecked();
+  await page.getByLabel("Customer", {exact: true}).selectOption(data.customer.id);
+  await page.getByLabel("Amount", {exact: false}).fill("25");
+  await page.getByLabel("Send notification to customer").check();
+  await expect(page.getByLabel("Notification title", {exact: true})).toHaveValue("Purchase registered");
+  await expect(page.getByLabel("Notification message", {exact: true})).toHaveValue(/\{\{currentPoints\}\}/);
+  await page.getByRole("button", {name: "Record payment"}).click();
+  await expect(page.getByRole("status")).toContainText("Balance: 27");
+  await expect(page.getByText("Your notification was recorded.", {exact: false})).toBeVisible();
+  const history = await (await request.get(`/api/v1/merchants/${data.merchant.id}/notifications`, {headers: data.headers})).json();
+  const payment = history.items.find(row => row.target_type === "payment");
+  const detail = await (await request.get(`/api/v1/merchants/${data.merchant.id}/notifications/${payment.id}`, {headers: data.headers})).json();
+  expect(detail.deliveries[0].payload.message).toContain("€25.00. You earned 25 points and now have 25");
+  await page.getByLabel("Language").selectOption("es");
+  await page.getByRole("link", {name: "Notificaciones", exact: true}).first().click();
+  await expect(page.getByRole("heading", {name: "Notificaciones", exact: true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("a lost send response can be retried without sending a second notification", async ({page, request}) => {
+  const data = await setup(page, request);
+  await page.getByRole("combobox", {name: "Campaign", exact: true}).first().selectOption(data.campaign.id);
+  let firstRequest;
+  await page.route(`**/merchants/${data.merchant.id}/notifications`, async route => {
+    if (route.request().method() !== "POST") return route.continue();
+    firstRequest = route.request().postDataJSON();
+    await route.fetch();
+    await route.abort();
+  }, {times: 1});
+  await page.getByRole("button", {name: "Send Notification", exact: true}).click();
+  await page.getByRole("dialog").getByRole("button", {name: "Send Notification", exact: true}).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  const next = page.waitForRequest(r => r.url().endsWith(`/merchants/${data.merchant.id}/notifications`) && r.method() === "POST");
+  await page.getByRole("button", {name: "Send Notification", exact: true}).click();
+  await page.getByRole("dialog").getByRole("button", {name: "Send Notification", exact: true}).click();
+  expect((await next).postDataJSON().request_id).toBe(firstRequest.request_id);
+  await expect(page.getByRole("status")).toContainText("Notification recorded");
+  const history = await (await request.get(`/api/v1/merchants/${data.merchant.id}/notifications`, {headers: data.headers})).json();
+  expect(history.total).toBe(1);
+});

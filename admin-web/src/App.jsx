@@ -9,6 +9,7 @@ import Coupons from "./pages/Coupons";
 import Transactions from "./pages/Transactions";
 import WalletConfig from "./pages/WalletConfig";
 import Passes from "./pages/Passes";
+import Notifications from "./pages/Notifications";
 
 function RequireAuth({ children }) {
   const { user, ready, t } = useApp();
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/wallet" element={<WalletConfig />} />
         <Route path="/passes" element={<Passes />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/notifications" element={<Notifications />} />
       </Route>
       <Route path="*" element={<Navigate to="/merchants" replace />} />
     </Routes>

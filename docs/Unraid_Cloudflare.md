@@ -4,6 +4,11 @@ El único archivo de arranque, tanto en Unraid como en local, es
 `docker-compose.unraid.yml`. **Cloudflare arranca automáticamente** al ejecutar
 Compose Up; no necesita un perfil adicional.
 
+Para instalar Notificaciones sobre la entrega anterior, actualizar `SOURCE_REF`
+conforme a [REDEPLOY_UNRAID.md](REDEPLOY_UNRAID.md). Los cinco ajustes
+`NOTIFICATION_*` permiten personalizar límites; la cola usa SQLite y la API actuales,
+sin añadir servicios ni cambiar destinos del túnel.
+
 | Dominio público | Destino interno del túnel |
 | --- | --- |
 | `api.slmartinez.org` | `http://api:8000` |

@@ -133,7 +133,9 @@ def apply_campaigns(
     return total
 
 
-def ingest_transaction(db: Session, payload: TransactionIn) -> TransactionResult:
+def ingest_transaction(
+    db: Session, payload: TransactionIn, user: models.AdminUser | None = None
+) -> TransactionResult:
     # SQLite serializes writers before reading balances/idempotency keys, including
     # across API workers. This prevents duplicate accrual and lost balance updates.
     db.execute(text("BEGIN IMMEDIATE"))
@@ -148,8 +150,14 @@ def ingest_transaction(db: Session, payload: TransactionIn) -> TransactionResult
     if existing:
         if existing.merchant_id != payload.merchant_id:
             raise HTTPException(409, "External transaction ID already used")
+        notification = db.query(models.Notification).filter_by(transaction_id=existing.id).first()
         db.commit()
-        return TransactionResult(status="duplicate", customer_id=existing.matched_customer_id)
+        return TransactionResult(
+            status="duplicate",
+            customer_id=existing.matched_customer_id,
+            notification_id=notification.id if notification else None,
+            notification_status=notification.status if notification else None,
+        )
     if merchant.status != "active":
         raise HTTPException(409, "Merchant is inactive")
     customer = match_customer(db, payload.merchant_id, payload.identifiers)
@@ -165,9 +173,16 @@ def ingest_transaction(db: Session, payload: TransactionIn) -> TransactionResult
     db.add(txn)
     db.flush()
     if not customer:
+        notification = _payment_notification(db, payload, txn, user)
         db.commit()
-        return TransactionResult(status="unmatched")
+        return TransactionResult(
+            status="unmatched",
+            notification_id=notification.id if notification else None,
+            notification_status=notification.status if notification else None,
+        )
     delta = apply_campaigns(db, payload.merchant_id, customer, payload.amount, txn.id)
+    db.flush()
+    notification = _payment_notification(db, payload, txn, user)
     db.commit()
     # External provider failures must never roll back a payment or duplicate points.
     updated = passes.update_customer_pass(db, customer)
@@ -177,4 +192,17 @@ def ingest_transaction(db: Session, payload: TransactionIn) -> TransactionResult
         points_delta=delta,
         new_balance=customer.points_balance,
         pass_updated=updated,
+        notification_id=notification.id if notification else None,
+        notification_status=notification.status if notification else None,
     )
+
+
+def _payment_notification(
+    db: Session, payload: TransactionIn, txn: models.Transaction, user: models.AdminUser | None
+) -> models.Notification | None:
+    if not payload.send_notification:
+        return None
+    from ..routers.auth import public_user
+    from .notifications import enqueue_payment
+
+    return enqueue_payment(db, user or public_user(), txn, payload.notification)
